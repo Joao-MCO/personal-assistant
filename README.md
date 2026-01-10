@@ -91,7 +91,6 @@ streamlit run main.py
 
 ---
 
-<<<<<<< HEAD
 ## 📂 Estrutura do Projeto
 
 ```text
@@ -131,4 +130,3 @@ streamlit run main.py
     ├── news.py       # Integração com GNews e resumos de notícias
     ├── shark.py      # Lógica de suporte e onboarding SharkDev
     └── manager.py    # Gerenciador de chamadas e roteamento de ferramentas
->>>>>>> f8d373883922543557ba819813533c8590a9f2cf
