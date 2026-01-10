@@ -1,0 +1,23 @@
+# Core dependencies
+python-dotenv
+requests
+
+# LangChain ecosystem
+langchain
+langchain-core
+langchain-community
+# LangGraph (novo)
+langgraph
+
+# LLM providers
+langchain-anthropic
+langchain-google-genai
+
+# RAG
+chromadb
+google-genai
+google-generativeai
+
+# Others
+pypdf
+streamlit>=1.29.0
