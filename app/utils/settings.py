@@ -1,32 +1,51 @@
 import os
+import streamlit as st
 from dotenv import load_dotenv
 
+# Carrega o .env se estiver rodando localmente
 load_dotenv()
 
+def get_secret(key, default=None):
+    """
+    Tenta buscar a chave primeiro no Streamlit Secrets.
+    Se falhar (ou não estiver no Streamlit), busca nas variáveis de ambiente (OS).
+    """
+    # 1. Tenta pegar do st.secrets (Nuvem)
+    try:
+        if key in st.secrets:
+            return st.secrets[key]
+    except (FileNotFoundError, AttributeError):
+        pass  # Ignora se não houver arquivo de secrets ou não for app Streamlit
+    
+    # 2. Tenta pegar do ambiente local (.env / Docker)
+    return os.getenv(key, default)
+
 class Settings:
+    # Agora usamos a função get_secret em vez de os.getenv direto
+    
     gemini = {
-        "api_key": os.getenv("GEMINI_API_KEY"),
-        "model": os.getenv("GEMINI_MODEL"),
-        "embedding": os.getenv("GEMINI_EMBEDDING_MODEL")
+        "api_key": get_secret("GEMINI_API_KEY"),
+        "model": get_secret("GEMINI_MODEL", "gemini-1.5-flash"), # Adicionei um valor padrão por segurança
+        "embedding": get_secret("GEMINI_EMBEDDING_MODEL")
     }
 
     maritaca = {
-        "api_key": os.getenv("MARITACA_API_KEY"),
-        "model": os.getenv("MARITACA_MODEL")
+        "api_key": get_secret("MARITACA_API_KEY"),
+        "model": get_secret("MARITACA_MODEL")
     }
 
     claude = {
-        "api_key": os.getenv("CLAUDE_API_KEY"),
-        "model": os.getenv("CLAUDE_MODEL")
+        "api_key": get_secret("CLAUDE_API_KEY"),
+        "model": get_secret("CLAUDE_MODEL")
     }
 
     chroma = {
-        "api_key": os.getenv("CHROMA_API_KEY"),
-        "tenant": os.getenv("CHROMA_TENANT"),
-        "database": os.getenv("CHROMA_DATABASE"),
-        "host": os.getenv("CHROMA_HOST")
+        "api_key": get_secret("CHROMA_API_KEY"),
+        "tenant": get_secret("CHROMA_TENANT"),
+        "database": get_secret("CHROMA_DATABASE"),
+        "host": get_secret("CHROMA_HOST")
     }
 
-    gnews_api_key = os.getenv("GNEWS_API_KEY")
-    max_tokens = os.getenv("MAX_TOKENS")
-    temperature = os.getenv("TEMPERATURE")
+    gnews_api_key = get_secret("GNEWS_API_KEY")
+    max_tokens = get_secret("MAX_TOKENS")
+    temperature = get_secret("TEMPERATURE")
