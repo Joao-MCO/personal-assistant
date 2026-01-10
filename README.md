@@ -87,10 +87,12 @@ Para iniciar a Cidinha, basta rodar o comando:
 
 ```bash
 streamlit run main.py
+```
 
 ---
 
 ## 📂 Estrutura do Projeto
+
 ├── agent/
 │   └── agent.py          # Lógica do grafo e orquestração do agente
 ├── data/                 # Documentos para alimentação do RAG
