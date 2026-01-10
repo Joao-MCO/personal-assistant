@@ -93,19 +93,21 @@ streamlit run main.py
 
 ## 📂 Estrutura do Projeto
 
-├── agent/
-│   └── agent.py          # Lógica do grafo e orquestração do agente
-├── data/                 # Documentos para alimentação do RAG
-├── models/
-│   └── tools.py          # Definição dos Schemas de entrada das ferramentas
-├── services/
-│   ├── chroma.py         # Conexão com banco vetorial
-│   └── embedding.py      # Script para processar PDFs e criar embeddings
-├── tools/                # Ferramentas específicas (News, Code, RPG, etc.)
-├── ui/
-│   ├── render.py         # Componentes de interface
-│   ├── state.py          # Gestão de estado do Streamlit
-│   └── styles.py         # CSS personalizado
-├── utils/
-│   └── settings.py       # Gerenciador de configurações e segredos
-└── main.py               # Ponto de entrada da aplicação
+```text
+.
+├── main.py           # Ponto de entrada da aplicação Streamlit
+├── agent.py          # Orquestração do Agente e lógica do Grafo
+├── tools.py          # Definição e schemas das ferramentas de IA
+├── settings.py       # Gerenciamento de chaves de API e configurações
+├── chroma.py         # Integração com o banco de dados vetorial
+├── embedding.py      # Lógica de processamento e vetorização
+├── encode_image.py   # Helper para processamento de imagens
+├── render.py         # Componentes visuais e interface
+├── state.py          # Gerenciamento de estado da sessão
+├── styles.py         # Definições de CSS (SharkDev Theme)
+│
+├── codes.py          # Lógica: Ajuda em Programação
+├── general.py        # Lógica: Assuntos Gerais
+├── news.py           # Lógica: Notícias (GNews + Maritaca)
+├── shark.py          # Lógica: Suporte SharkDev / Blip
+└── manager.py        # Gerenciador de roteamento de ferramentas
