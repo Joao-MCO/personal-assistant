@@ -91,6 +91,7 @@ streamlit run main.py
 
 ---
 
+<<<<<<< HEAD
 ## 📂 Estrutura do Projeto
 
 ```text
@@ -111,3 +112,23 @@ streamlit run main.py
 ├── news.py           # Lógica: Notícias (GNews + Maritaca)
 ├── shark.py          # Lógica: Suporte SharkDev / Blip
 └── manager.py        # Gerenciador de roteamento de ferramentas
+=======
+📂 Estrutura do Projeto (Arquivos Principais)
+├── main.py           # Ponto de entrada da aplicação Streamlit
+├── agent.py          # Orquestração do Agente e lógica do Grafo (LangGraph)
+├── tools.py          # Definição e schemas das ferramentas de IA
+├── settings.py       # Gerenciamento de chaves de API e configurações
+├── chroma.py         # Integração com o banco de dados vetorial ChromaDB
+├── embedding.py      # Lógica de processamento e vetorização de documentos
+├── encode_image.py   # Helper para processamento e codificação de imagens
+├── render.py         # Componentes visuais e renderização da interface
+├── state.py          # Gerenciamento de estado da sessão do Streamlit
+├── styles.py         # Definições de CSS e estilo visual (SharkDev Theme)
+│
+└── 🛠️ Ferramentas (Tools):
+    ├── codes.py      # Lógica da ferramenta de Ajuda em Programação
+    ├── general.py    # Lógica para Assuntos Gerais
+    ├── news.py       # Integração com GNews e resumos de notícias
+    ├── shark.py      # Lógica de suporte e onboarding SharkDev
+    └── manager.py    # Gerenciador de chamadas e roteamento de ferramentas
+>>>>>>> f8d373883922543557ba819813533c8590a9f2cf
