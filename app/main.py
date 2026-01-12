@@ -20,7 +20,7 @@ def main():
         st.session_state.processing = True
 
     # 5. Componentes de Input (Upload + Chat)
-    with st.popover("📎", help="Anexar Arquivos"):
+    with st.popover("📎"):
         st.markdown("### Anexar Documentos")
         uploaded_files = st.file_uploader(
             "Upload", 
