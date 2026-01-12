@@ -11,7 +11,7 @@ def render_header():
 
     with st.container():
         if os.path.exists(img_logo):
-            st.image(img_logo, use_container_width=True)
+            st.image(img_logo, width='stretch')
             st.markdown("<br>", unsafe_allow_html=True)
         else:
             st.markdown("<h1 style='text-align:center; color: #F551B1; border: 2px solid #F551B1;'>LOGO SHARKDEV</h1>", unsafe_allow_html=True)
@@ -19,7 +19,7 @@ def render_header():
         col1, col2 = st.columns([1.2, 5])
         with col1:
             if os.path.exists(img_cidinha):
-                st.image(img_cidinha, use_container_width=True)
+                st.image(img_cidinha, width='stretch')
             else:
                 st.markdown("🦈") 
         with col2:
@@ -45,7 +45,7 @@ def render_chat_history():
             
             if images:
                 for img_data in images:
-                    st.image(img_data, use_container_width=True)
+                    st.image(img_data, width='stretch')
 
 def render_upload_warning(file_count):
     """Mostra o aviso flutuante de arquivos anexados"""

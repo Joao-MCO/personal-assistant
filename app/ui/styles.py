@@ -82,6 +82,7 @@ def apply_custom_styles():
             width: 100% !important;
             height: 100% !important;
             box-shadow: none !important;
+            border-radius: 50% !important;
         }
         
         div[data-testid="stPopover"] button:hover {

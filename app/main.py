@@ -78,7 +78,7 @@ def main():
                 st.markdown(display_text)
                 if msg_images:
                     for img_data in msg_images:
-                        st.image(img_data, use_container_width=True)
+                        st.image(img_data, width='stretch')
 
             # Chama o Agente
             with st.spinner("A Pamela não vai gostar nada dessa demora..."):
