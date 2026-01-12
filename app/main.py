@@ -1,3 +1,4 @@
+import logging
 import streamlit as st
 from ui.styles import apply_custom_styles
 from ui.render import render_header, render_chat_history, render_upload_warning

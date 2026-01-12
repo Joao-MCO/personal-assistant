@@ -1,3 +1,5 @@
+import datetime
+import json
 import os
 import base64
 from typing import List, TypedDict, Annotated, Sequence, Union
@@ -54,30 +56,53 @@ class AgentFactory:
         for tool in self.tools:
             tools_message = tools_message + f"* {tool.name}: {tool.description}\n"
 
+        # 1. CARREGAR E-MAILS (Com correção UTF-8)
+        try:
+            with open("app/assets/emails.json", "r", encoding="utf-8") as f:
+                emails_list = json.load(f)
+                # O TRUQUE ESTÁ AQUI:
+                # Substituímos { por {{ e } por }} para o LangChain não confundir com variáveis
+                emails_str = json.dumps(emails_list, ensure_ascii=False).replace("{", "{{").replace("}", "}}")
+        except Exception as e:
+            print(f"Aviso: Não foi possível carregar emails.json: {e}")
+            emails_str = "[]"
+
+        agora = datetime.datetime.now()
+        data_hoje = agora.strftime("%d/%m/%Y")
+        dia_semana = agora.strftime("%A") 
+        hora_agora = agora.strftime("%H:%M")
+        
+        dias_pt = {
+            "Monday": "Segunda-feira", "Tuesday": "Terça-feira", "Wednesday": "Quarta-feira",
+            "Thursday": "Quinta-feira", "Friday": "Sexta-feira", "Saturday": "Sábado", "Sunday": "Domingo"
+        }
+        dia_hoje_pt = dias_pt.get(dia_semana, dia_semana)
+
+        # 3. PROMPT ENRIQUECIDO
         template = f"""
             ### 🧠 PERFIL DO ORQUESTRADOR
-            Você é o motor de decisão da **Cidinha**, a assistente inteligente da **SharkDev**. Seu papel principal é analisar a intenção do usuário e coordenar o fluxo de trabalho entre as ferramentas disponíveis.
+            Você é a **Cidinha**, assistente virtual da SharkDev.
+            
+            ### 📅 CONTEXTO TEMPORAL (CRÍTICO PARA AGENDAMENTOS)
+            - **Data Atual:** {dia_hoje_pt}, {data_hoje}.
+            - **Hora Atual:** {hora_agora}.
+            - **Regra:** Use esta data como base para calcular "hoje", "amanhã" (dia seguinte), "sexta-feira que vem", etc.
+            - **Atenção:** Ao chamar ferramentas de calendário, você DEVE calcular o dia/mês/ano exatos baseados na data acima.
+
+            ### 📒 LISTA DE CONTATOS SHARKDEV
+            Use estes dados para encontrar e-mails de participantes:
+            {emails_str}
 
             {tools_message}
 
-            ### 📝 DIRETRIZES DE EXECUÇÃO
-            - **Prioridade de Arquivo:** Se houver um arquivo no contexto, sua primeira ação deve ser descrever/analisar o conteúdo dele antes de chamar qualquer ferramenta.
-            - **Pensamento Crítico:** Se a pergunta for complexa, quebre-a em etapas. Você pode chamar múltiplas ferramentas em sequência se necessário.
-            - **Personalidade SharkDev:** Mantenha sempre o tom simpático e proativo. Use emojis (🚀, 🦈, ✅) para pontuar a comunicação.
-            - **Resiliência:** Se uma ferramenta retornar um erro ou "não encontrado", **NÃO** desista. Tente reformular a busca (ex: mudar o termo de pesquisa, trocar o país) e chame a ferramenta novamente.
+            ### 📝 DIRETRIZES
+            - Se o usuário disser apenas o nome (ex: "Reunião com o Márcio"), busque o e-mail correspondente na lista de contatos acima.
+            - Se não encontrar o nome na lista, use o domínio @sharkdev.com.br por padrão.
             
-            ### 🚀 REGRA DE OURO PARA FERRAMENTAS (Sucesso)
-            Se você usar 'LerNoticias' ou 'DuvidasRPG' e a ferramenta retornar **sucesso** (dados reais), NÃO escreva nada depois. O sistema exibirá o resultado.
-            Mas, se a ferramenta retornar **ERRO**, você DEVE assumir o controle e tentar novamente.
-
-            ### 🏗️ ESTRUTURA DE RACIOCÍNIO (Chain-of-Thought)
-            Antes de gerar a saída, siga internamente estes passos:
-            1. **Intenção:** O que o usuário quer alcançar?
-            2. **Entidades:** Existem nomes, siglas ou termos técnicos chave?
-            3. **Seleção:** Qual(is) ferramenta(s) resolve(m) isso com maior precisão?
-            4. **Tom:** Como a Cidinha responderia a isso de forma acolhedora?
+            ### 🚀 REGRA DE OURO
+            Se decidir usar 'LerNoticias', 'ConsultarAgenda' ou 'DuvidasRPG', apenas dispare a ferramenta.
         """
-        
+
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", template),
             MessagesPlaceholder(variable_name="messages"),
@@ -107,23 +132,21 @@ class AgentFactory:
             messages = state["messages"]
             last_message = messages[-1]
             
-            # Se for mensagem de ferramenta, analisamos o conteúdo
             if isinstance(last_message, ToolMessage):
                 content = last_message.content or ""
-                
-                # --- LÓGICA DE RETRY PARA NOTÍCIAS ---
-                if last_message.name == "LerNoticias":
-                    # Se conter frases de erro típicas da sua ferramenta
-                    if "Erro" in content or "Não foi possível" in content or "Não encontrei" in content:
-                        return "agent" # Volta pro LLM tentar de novo (mudar params)
-                    else:
-                        return "end"   # Sucesso: Mostra direto pro usuário
-                
-                # --- LÓGICA PARA RPG (Return Direct) ---
-                if last_message.name == "DuvidasRPG":
+                tool_name = last_message.name
+            
+                if tool_name in ["ConsultarAgenda", "CodeHelper", "SharkHelper"]:
+                    return "agent"
+
+                if tool_name == "LerNoticias":
+                    if "Erro" in content or "Não foi possível" in content:
+                        return "agent"
+                    return "end"
+
+                if tool_name in ["CriarEvento", "RPGQuestion"]:
                      return "end"
 
-            # Para outras ferramentas (CodeHelper, etc), volta para o agente explicar
             return "agent"
         
         workflow.add_node("agent", call_model)
@@ -131,12 +154,10 @@ class AgentFactory:
         
         workflow.set_entry_point("agent")
         
-        # Define se vai para ferramenta ou termina
         workflow.add_conditional_edges(
             "agent", should_continue, {"continue": "tools", "end": END}
         )
         
-        # Define se volta para o agente (Retry/Explicação) ou termina (Sucesso Direto)
         workflow.add_conditional_edges(
             "tools", after_tools, {"agent": "agent", "end": END}
         )

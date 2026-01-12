@@ -1,3 +1,4 @@
+from tools.google import CreateEvent, CheckCalendar
 from tools.general import GenericQuestion, RPGQuestion
 from tools.news import ReadNews
 from tools.codes import CodeHelper
@@ -8,11 +9,15 @@ generic = GenericQuestion()
 code = CodeHelper()
 rpg = RPGQuestion()
 shark = SharkHelper()
+create_event = CreateEvent()
+check_calendar = CheckCalendar()
 
 agent_tools = [
     news_tool,
     code,
     generic,
     rpg,
-    shark
+    shark,
+    create_event,
+    check_calendar
 ]

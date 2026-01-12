@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -20,3 +20,21 @@ class CodeHelperInput(BaseModel):
 class SharkHelperInput(BaseModel):
     pergunta: str = Field(description="Pergunta informada pelo usuário.")
     temas: List[str] = Field(description="Lista dos principais temas. Limite Máximo: 5")
+
+class DateParts(BaseModel):
+    day: int = Field(description="Dia do mês (1-31)")
+    month: int = Field(description="Mês (1-12)")
+    year: int = Field(description="Ano (ex: 2026)")
+    hours: int = Field(description="Hora (0-23)")
+    minutes: int = Field(description="Minutos (0-59)")
+class CreateEventInput(BaseModel):
+    meeting_date: DateParts = Field(description="Data, Horas e Minutos da reunião")
+    description: str = Field(description="Título do evento")
+    attendees: Optional[List[str]] = Field(default=None, description="Lista de e-mails")
+    meet_length: int = Field(default=30, description="Duração em minutos")
+    timezone: str = Field(default="America/Sao_Paulo")
+
+class CheckCalendarInput(BaseModel):
+    start_date: DateParts = Field(description="Data, Horas e Minutos iniciais do filtro de pesquisa")
+    end_date: DateParts = Field(description="Data, Horas e Minutos finais do filtro de pesquisa")
+    emails: List[str] = Field(description="Lista de e-mails.")
