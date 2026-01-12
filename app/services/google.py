@@ -1,64 +1,41 @@
-import os
 import streamlit as st
-from utils.settings import Settings
-from google.auth.transport.requests import Request
+from utils.settings import Settings, logger
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+import logging
 
 def get_service():
     creds = None
-    scopes = Settings.google["scopes"]
+    scopes = ["https://www.googleapis.com/auth/calendar"]
 
-    # ---------------------------------------------------------
-    # ESTRATÉGIA 1: Tentar carregar das Secrets/Env (Nuvem)
-    # ---------------------------------------------------------
-    if Settings.google["token"]:
+    # 1. Tenta carregar o token DOS SECRETS (Prioridade na Nuvem)
+    # O Settings.google["token"] já deve estar pegando o JSON do secret GOOGLE_TOKEN_JSON
+    token_json = Settings.google.get("token")
+    
+    if token_json:
         try:
-            creds = Credentials.from_authorized_user_info(Settings.google["token"], scopes)
+            creds = Credentials.from_authorized_user_info(token_json, scopes)
+            logger.info("Credenciais carregadas dos Secrets.")
         except Exception as e:
-            print(f"Erro ao ler token das configurações: {e}")
+            logger.error(f"Erro ao carregar token dos Secrets: {e}")
 
-    # ---------------------------------------------------------
-    # ESTRATÉGIA 2: Tentar carregar arquivo local (Cache Local)
-    # ---------------------------------------------------------
-    if not creds and os.path.exists('token.json'):
+    # 2. Validação e Renovação Automática (O Segredo do sucesso)
+    # Se carregou as credenciais, mas elas expiraram...
+    if creds and creds.expired and creds.refresh_token:
         try:
-            creds = Credentials.from_authorized_user_file('token.json', scopes)
+            logger.info("Token expirado. Tentando renovar via Refresh Token...")
+            # Isso renova o token NA MEMÓRIA usando o refresh_token que está salvo
+            creds.refresh(Request())
+            logger.info("Token renovado com sucesso!")
         except Exception as e:
-            print(f"Erro ao ler token.json: {e}")
+            logger.error(f"Falha ao renovar token: {e}")
+            # Se falhar a renovação, anulamos para não tentar usar token podre
+            creds = None
 
-    # ---------------------------------------------------------
-    # Validação e Renovação
-    # ---------------------------------------------------------
+    # 3. Retorno
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except Exception as e:
-                print(f"Erro ao renovar token: {e}")
-                creds = None # Força novo login se falhar renovação
-
-        # Se ainda não temos credenciais válidas...
-        if not creds:
-            # Se estiver no Streamlit Cloud, não podemos abrir browser -> ERRO
-            if hasattr(st, "runtime") and st.runtime.exists():
-                st.error("❌ ERRO DE AUTENTICAÇÃO NO CLOUD")
-                st.warning("Você precisa gerar o token localmente e colocá-lo nas Secrets como 'GOOGLE_TOKEN_JSON'.")
-                return None
-            
-            # Se for local, abre o navegador para login
-            else:
-                print("Iniciando fluxo de login no navegador...")
-                flow = InstalledAppFlow.from_client_config(
-                    client_config=Settings.google["auth"],
-                    scopes=scopes
-                )
-                creds = flow.run_local_server(port=0)
-                
-                # Salva o token para a próxima vez (Cache Local)
-                print("Login realizado! Salvando 'token.json'...")
-                with open('token.json', 'w') as token:
-                    token.write(creds.to_json())
+        logger.error("Não foi possível obter credenciais válidas.")
+        return None
 
     return build("calendar", "v3", credentials=creds)

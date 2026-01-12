@@ -1,9 +1,9 @@
 import datetime
 import json
-import os
 import base64
-from typing import List, TypedDict, Annotated, Sequence, Union
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
+import operator
+from typing import List, TypedDict, Annotated, Sequence
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.chat_models import ChatMaritalk
 from langchain_anthropic import ChatAnthropic
@@ -13,60 +13,55 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from utils.settings import Settings
 from tools.manager import agent_tools
-import operator
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
 
 class AgentFactory:
     def __init__(self, llm="gemini"):
-        # Certifique-se de usar gemini-1.5-flash ou gemini-1.5-pro no settings
+        
+        # Configuração do Modelo
         if llm == "gemini":
             self.llm = ChatGoogleGenerativeAI(
                 api_key=Settings.gemini["api_key"],
                 model=Settings.gemini["model"],
-                temperature=0.7
+                temperature=0.4  # Reduzi a temperatura para focar na execução de ferramentas
             )
-
-        if llm == "maritaca":
+        elif llm == "maritaca":
             self.llm = ChatMaritalk(
                 api_key=Settings.maritaca["api_key"],
                 model=Settings.maritaca["model"],
                 temperature=0.7
             )
-        
-        if llm == "claude":
+        elif llm == "claude":
             self.llm = ChatAnthropic(
                 api_key=Settings.claude["api_key"],
                 model=Settings.claude["model"],
                 temperature=0.7
             )
-        
-        if llm == "gpt":
+        elif llm == "gpt":
             self.llm = ChatOpenAI(
                 api_key=Settings.openai["api_key"],
                 model=Settings.openai["model"],
                 temperature=0.7
             )
         
+        # --- VINCULAÇÃO CORRETA ---
+        # Apenas o bind é necessário. O modelo lerá a definição da classe Pydantic automaticamente.
         self.llm_with_tools = self.llm.bind_tools(agent_tools)
         self.tools = agent_tools
 
-        tools_message = ""
-        for tool in self.tools:
-            tools_message = tools_message + f"* {tool.name}: {tool.description}\n"
-
-        # 1. CARREGAR E-MAILS (Com correção UTF-8)
+        # 1. CARREGAR E-MAILS (Com a correção de escape do JSON)
         try:
             with open("app/assets/emails.json", "r", encoding="utf-8") as f:
                 emails_list = json.load(f)
-                # O TRUQUE ESTÁ AQUI:
-                # Substituímos { por {{ e } por }} para o LangChain não confundir com variáveis
+                # Escapando chaves para não quebrar o PromptTemplate
                 emails_str = json.dumps(emails_list, ensure_ascii=False).replace("{", "{{").replace("}", "}}")
         except Exception as e:
             print(f"Aviso: Não foi possível carregar emails.json: {e}")
             emails_str = "[]"
 
+        # 2. CONTEXTO TEMPORAL
         agora = datetime.datetime.now()
         data_hoje = agora.strftime("%d/%m/%Y")
         dia_semana = agora.strftime("%A") 
@@ -78,29 +73,25 @@ class AgentFactory:
         }
         dia_hoje_pt = dias_pt.get(dia_semana, dia_semana)
 
-        # 3. PROMPT ENRIQUECIDO
+        # 3. PROMPT LIMPO (Sem injeção de tools_message)
         template = f"""
-            ### 🧠 PERFIL DO ORQUESTRADOR
-            Você é a **Cidinha**, assistente virtual da SharkDev.
-            
-            ### 📅 CONTEXTO TEMPORAL (CRÍTICO PARA AGENDAMENTOS)
-            - **Data Atual:** {dia_hoje_pt}, {data_hoje}.
-            - **Hora Atual:** {hora_agora}.
-            - **Regra:** Use esta data como base para calcular "hoje", "amanhã" (dia seguinte), "sexta-feira que vem", etc.
-            - **Atenção:** Ao chamar ferramentas de calendário, você DEVE calcular o dia/mês/ano exatos baseados na data acima.
+            ### 🧠 PERFIL
+            Você é a **Cidinha**, assistente virtual executiva da SharkDev.
+            Sua missão é facilitar a vida da equipe agendando reuniões, tirando dúvidas e lendo notícias.
 
-            ### 📒 LISTA DE CONTATOS SHARKDEV
-            Use estes dados para encontrar e-mails de participantes:
+            ### 📅 CONTEXTO TEMPORAL (Use para calcular datas)
+            - **Hoje:** {dia_hoje_pt}, {data_hoje}.
+            - **Hora:** {hora_agora}.
+            - **Regra:** Se o usuário pedir "amanhã às 14h", calcule a data exata com base em hoje ({data_hoje}).
+            - **Importante:** A ferramenta de calendário exige dia, mês e ano precisos.
+
+            ### 📒 LISTA DE CONTATOS
             {emails_str}
 
-            {tools_message}
-
-            ### 📝 DIRETRIZES
-            - Se o usuário disser apenas o nome (ex: "Reunião com o Márcio"), busque o e-mail correspondente na lista de contatos acima.
-            - Se não encontrar o nome na lista, use o domínio @sharkdev.com.br por padrão.
-            
-            ### 🚀 REGRA DE OURO
-            Se decidir usar 'LerNoticias', 'ConsultarAgenda' ou 'DuvidasRPG', apenas dispare a ferramenta.
+            ### ⚙️ INSTRUÇÕES DE EXECUÇÃO
+            1. **Prioridade:** Se o usuário pedir algo que suas ferramentas fazem (Agenda, Notícias, Código, RPG), **USE A FERRAMENTA**. Não explique, apenas faça.
+            2. **Agendamento:** Se faltar o e-mail de alguém, procure na lista acima. Se não achar, tente nome.sobrenome@sharkdev.com.br.
+            3. **Assertividade:** Nunca diga "não tenho acesso" se você possui a ferramenta `CriarEvento` ou `ConsultarAgenda` disponível. Tente usá-las.
         """
 
         self.prompt = ChatPromptTemplate.from_messages([
@@ -124,26 +115,23 @@ class AgentFactory:
         def should_continue(state: AgentState):
             messages = state["messages"]
             last_message = messages[-1]
-            if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-                return "end"
-            return "continue"
+            # Verifica se o modelo decidiu chamar uma ferramenta
+            if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
+                return "continue"
+            return "end"
 
         def after_tools(state: AgentState):
             messages = state["messages"]
             last_message = messages[-1]
             
             if isinstance(last_message, ToolMessage):
-                content = last_message.content or ""
                 tool_name = last_message.name
-            
-                if tool_name in ["ConsultarAgenda", "CodeHelper", "SharkHelper"]:
+                
+                # CodeHelper e ConsultarAgenda voltam pro agente para ele explicar o resultado
+                if tool_name in ["ConsultarAgenda", "CodeHelper", "SharkHelper", "LerNoticias"]:
                     return "agent"
 
-                if tool_name == "LerNoticias":
-                    if "Erro" in content or "Não foi possível" in content:
-                        return "agent"
-                    return "end"
-
+                # CriarEvento já gera uma resposta final bonita (no google.py), então podemos encerrar
                 if tool_name in ["CriarEvento", "RPGQuestion"]:
                      return "end"
 
@@ -164,87 +152,70 @@ class AgentFactory:
         
         return workflow.compile()
     
-    def _process_file(self, file_data: bytes, mime_type: str) -> dict:
-        """Converte imagem/arquivo para o formato multimodal"""
-        encoded_data = base64.b64encode(file_data).decode('utf-8')
-        # Gemini aceita PDF via 'image_url' (data inline) no LangChain
-        return {
-            "type": "image_url",
-            "image_url": {
-                "url": f"data:{mime_type};base64,{encoded_data}"
-            }
-        }
-
     def _reconstruct_history(self, session_messages: List[dict]) -> List[BaseMessage]:
-        """Converte o histórico de dicts do Streamlit para objetos LangChain"""
         history = []
         for msg in session_messages:
-            if not isinstance(msg, dict):
-                continue
-
+            if not isinstance(msg, dict): continue
+            
             role = msg.get("role")
             content = msg.get("content")
-            
             if not content: continue
 
             if role == "user":
-                history.append(HumanMessage(content=content))
+                history.append(HumanMessage(content=str(content)))
             elif role == "assistant":
-                history.append(AIMessage(content=content))
+                history.append(AIMessage(content=str(content)))
         return history
 
     def invoke(self, input_text: str, session_messages: List[dict], uploaded_files: List[dict] = None):
-        """Constrói a mensagem multimodal e invoca o agente com histórico"""
-        
-        # 1. Recupera o histórico anterior
         history_objects = self._reconstruct_history(session_messages)
         
-        # 2. Constrói a mensagem ATUAL
-        current_message_content = []
-        
+        current_content = []
         if input_text:
-            current_message_content.append({"type": "text", "text": input_text})
+            current_content.append({"type": "text", "text": input_text})
             
         if uploaded_files:
             for file in uploaded_files:
-                mime = file['mime']
-                data = file['data']
-                
-                if mime.startswith('image/') or mime == 'application/pdf':
-                    media_block = self._process_file(data, mime)
-                    current_message_content.append(media_block)
-                
-                elif mime.startswith('text/') or 'application/json' in mime or 'csv' in mime:
-                    try:
-                        text_content = data.decode('utf-8', errors='ignore')
-                        current_message_content.append({
-                            "type": "text", 
-                            "text": f"\n\n--- Arquivo Anexo ({mime}) ---\n{text_content}\n-------------------------------"
+                try:
+                    mime = file['mime']
+                    if mime.startswith('image/'):
+                        encoded = base64.b64encode(file['data']).decode('utf-8')
+                        current_content.append({
+                            "type": "image_url", 
+                            "image_url": {"url": f"data:{mime};base64,{encoded}"}
                         })
-                    except Exception:
-                        pass
+                    else:
+                        text = file['data'].decode('utf-8', errors='ignore')
+                        current_content.append({"type": "text", "text": f"\n[Anexo]: {text}"})
+                except:
+                    pass
         
-        if not current_message_content:
-            current_message_content.append({"type": "text", "text": "..."})
+        if not current_content:
+            current_content.append({"type": "text", "text": "..."})
 
-        current_human_message = HumanMessage(content=current_message_content)
+        inputs = {"messages": history_objects + [HumanMessage(content=current_content)]}
         
-        # 3. Executa o grafo
-        inputs = {"messages": history_objects + [current_human_message]}
-        
-        result = self.graph.invoke(inputs)
-        
-        # 4. Processa o retorno
-        last_message = result["messages"][-1]
-        content = last_message.content
-        
+        # Execução do Grafo
+        try:
+            result = self.graph.invoke(inputs)
+            last_message = result["messages"][-1]
+            content = last_message.content
+        except Exception as e:
+            return {"output": [{"role": "assistant", "content": f"Erro interno no Agente: {str(e)}"}]}
+
+        # Correção de retorno vazio (caso a ferramenta tenha rodado mas o conteúdo não veio)
+        if not content:
+            if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+                 # Se parou numa chamada de ferramenta sem executar o nó 'tools' (erro raro)
+                 content = "Estou tentando acessar a agenda, mas houve uma interrupção técnica."
+            else:
+                 # Se for ToolMessage, o conteúdo é o output da ferramenta
+                 if isinstance(last_message, ToolMessage):
+                     content = last_message.content
+
+        # Garantia final de string
         if isinstance(content, list):
-            text_parts = []
-            for item in content:
-                if isinstance(item, dict) and 'text' in item:
-                    text_parts.append(item['text'])
-                elif isinstance(item, str):
-                    text_parts.append(item)
-            content = "\n".join(text_parts) if text_parts else str(content)
-
-        return {"output": [{"role": "assistant", "content": content}]}
+            parts = [c.get("text", "") for c in content if isinstance(c, dict)]
+            content = " ".join(parts)
+            
+        return {"output": [{"role": "assistant", "content": str(content)}]}

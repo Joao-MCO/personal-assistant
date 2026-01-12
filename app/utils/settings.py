@@ -25,15 +25,51 @@ def get_secret(key, default=None):
     return os.getenv(key, default)
 
 def get_json_secret(key, default=None):
-    """Auxiliar para carregar strings JSON com segurança"""
-    content = get_secret(key)
-    if content:
+    """
+    Carrega segredos JSON de forma robusta, aceitando String ou Dict.
+    """
+    data = get_secret(key)
+    
+    # 1. Se não encontrou nada
+    if data is None:
+        return default
+
+    # 2. Se já for um dicionário (O Streamlit parseou o TOML automaticamente)
+    if isinstance(data, dict):
+        return data
+
+    # 3. Se for string, tenta fazer o parse do JSON
+    if isinstance(data, str):
         try:
-            return json.loads(content)
+            return json.loads(data)
         except json.JSONDecodeError:
-            print(f"Aviso: A chave {key} não contém um JSON válido.")
+            print(f"Erro: A chave {key} tem uma string que não é um JSON válido.")
             return default
+            
     return default
+
+# --- NOVA FUNÇÃO PARA LER CREDENCIAIS ---
+def get_google_credentials():
+    """
+    Busca credenciais OAuth no .env ou no arquivo credentials.json local.
+    """
+    # 1. Tenta pegar da variável de ambiente (Deploy/Cloud)
+    json_str = get_secret("GOOGLE_API_JSON")
+    if json_str:
+        try:
+            return json.loads(json_str)
+        except Exception as e:
+            print(f"Erro ao ler GOOGLE_API_JSON do env: {e}")
+    
+    # 2. Se não achou ou falhou, tenta ler o arquivo local (Desenvolvimento)
+    if os.path.exists("credentials.json"):
+        try:
+            with open("credentials.json", "r") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Erro ao ler credentials.json: {e}")
+            
+    return {} # Retorna vazio se falhar tudo
 
 class Settings:
     
@@ -65,9 +101,10 @@ class Settings:
         "host": get_secret("CHROMA_HOST")
     }
 
-    # --- ALTERAÇÕES AQUI ---
+    # --- GOOGLE CONFIG ATUALIZADA ---
     google = {
-        "auth": get_json_secret("GOOGLE_API_JSON", {}),
+        # Usa a nova função que lê o arquivo credentials.json automaticamente
+        "auth": get_google_credentials(),
         
         "token": get_json_secret("GOOGLE_TOKEN_JSON", None),
         
