@@ -1,7 +1,7 @@
 import os
 import base64
 from typing import List, TypedDict, Annotated, Sequence, Union
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.chat_models import ChatMaritalk
 from langchain_anthropic import ChatAnthropic
@@ -47,15 +47,27 @@ class AgentFactory:
             tools_message = tools_message + f"* {tool.name}: {tool.description}\n"
 
         template = f"""
-            Você é a Cidinha, a secretária virtual da SharkDev, uma empresa de tecnologia.
-            
-            SUAS CAPACIDADES:
-            1. Você É CAPAZ de analisar imagens, ler documentos (PDFs, TXT) e processar arquivos enviados.
-            2. Se receber um arquivo (imagem ou PDF), analise seu conteúdo visual ou textual detalhadamente.
-            3. Seja sempre simpática, proativa e use emojis.
-            
-            Ferramentas disponíveis:
+            ### 🧠 PERFIL DO ORQUESTRADOR
+            Você é o motor de decisão da **Cidinha**, a assistente inteligente da **SharkDev**. Seu papel principal é analisar a intenção do usuário e coordenar o fluxo de trabalho entre as ferramentas disponíveis.
+
             {tools_message}
+
+            ### 📝 DIRETRIZES DE EXECUÇÃO
+            - **Prioridade de Arquivo:** Se houver um arquivo no contexto, sua primeira ação deve ser descrever/analisar o conteúdo dele antes de chamar qualquer ferramenta.
+            - **Pensamento Crítico:** Se a pergunta for complexa, quebre-a em etapas. Você pode chamar múltiplas ferramentas em sequência se necessário.
+            - **Personalidade SharkDev:** Mantenha sempre o tom simpático e proativo. Use emojis (🚀, 🦈, ✅) para pontuar a comunicação.
+            - **Resiliência:** Se uma ferramenta retornar um erro ou "não encontrado", **NÃO** desista. Tente reformular a busca (ex: mudar o termo de pesquisa, trocar o país) e chame a ferramenta novamente.
+            
+            ### 🚀 REGRA DE OURO PARA FERRAMENTAS (Sucesso)
+            Se você usar 'LerNoticias' ou 'DuvidasRPG' e a ferramenta retornar **sucesso** (dados reais), NÃO escreva nada depois. O sistema exibirá o resultado.
+            Mas, se a ferramenta retornar **ERRO**, você DEVE assumir o controle e tentar novamente.
+
+            ### 🏗️ ESTRUTURA DE RACIOCÍNIO (Chain-of-Thought)
+            Antes de gerar a saída, siga internamente estes passos:
+            1. **Intenção:** O que o usuário quer alcançar?
+            2. **Entidades:** Existem nomes, siglas ou termos técnicos chave?
+            3. **Seleção:** Qual(is) ferramenta(s) resolve(m) isso com maior precisão?
+            4. **Tom:** Como a Cidinha responderia a isso de forma acolhedora?
         """
         
         self.prompt = ChatPromptTemplate.from_messages([
@@ -82,16 +94,44 @@ class AgentFactory:
             if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
                 return "end"
             return "continue"
+
+        def after_tools(state: AgentState):
+            messages = state["messages"]
+            last_message = messages[-1]
+            
+            # Se for mensagem de ferramenta, analisamos o conteúdo
+            if isinstance(last_message, ToolMessage):
+                content = last_message.content or ""
+                
+                # --- LÓGICA DE RETRY PARA NOTÍCIAS ---
+                if last_message.name == "LerNoticias":
+                    # Se conter frases de erro típicas da sua ferramenta
+                    if "Erro" in content or "Não foi possível" in content or "Não encontrei" in content:
+                        return "agent" # Volta pro LLM tentar de novo (mudar params)
+                    else:
+                        return "end"   # Sucesso: Mostra direto pro usuário
+                
+                # --- LÓGICA PARA RPG (Return Direct) ---
+                if last_message.name == "DuvidasRPG":
+                     return "end"
+
+            # Para outras ferramentas (CodeHelper, etc), volta para o agente explicar
+            return "agent"
         
         workflow.add_node("agent", call_model)
         workflow.add_node("tools", tool_node)
         
         workflow.set_entry_point("agent")
         
+        # Define se vai para ferramenta ou termina
         workflow.add_conditional_edges(
             "agent", should_continue, {"continue": "tools", "end": END}
         )
-        workflow.add_edge("tools", "agent")
+        
+        # Define se volta para o agente (Retry/Explicação) ou termina (Sucesso Direto)
+        workflow.add_conditional_edges(
+            "tools", after_tools, {"agent": "agent", "end": END}
+        )
         
         return workflow.compile()
     
@@ -110,10 +150,12 @@ class AgentFactory:
         """Converte o histórico de dicts do Streamlit para objetos LangChain"""
         history = []
         for msg in session_messages:
+            if not isinstance(msg, dict):
+                continue
+
             role = msg.get("role")
             content = msg.get("content")
             
-            # Pula mensagens de erro ou vazias se houver
             if not content: continue
 
             if role == "user":
@@ -139,39 +181,41 @@ class AgentFactory:
                 mime = file['mime']
                 data = file['data']
                 
-                # Suporte para Imagens E PDFs (Application/PDF)
                 if mime.startswith('image/') or mime == 'application/pdf':
                     media_block = self._process_file(data, mime)
                     current_message_content.append(media_block)
                 
-                # Suporte para Textos/Códigos/JSON
                 elif mime.startswith('text/') or 'application/json' in mime or 'csv' in mime:
-                    text_content = data.decode('utf-8', errors='ignore')
-                    current_message_content.append({
-                        "type": "text", 
-                        "text": f"\n\n--- Arquivo Anexo ({mime}) ---\n{text_content}\n-------------------------------"
-                    })
+                    try:
+                        text_content = data.decode('utf-8', errors='ignore')
+                        current_message_content.append({
+                            "type": "text", 
+                            "text": f"\n\n--- Arquivo Anexo ({mime}) ---\n{text_content}\n-------------------------------"
+                        })
+                    except Exception:
+                        pass
         
-        # Se não houver conteúdo (ex: envio vazio), evita erro
         if not current_message_content:
             current_message_content.append({"type": "text", "text": "..."})
 
-        # Cria a mensagem humana atual
         current_human_message = HumanMessage(content=current_message_content)
         
-        # 3. Executa o grafo com HISTÓRICO + MENSAGEM ATUAL
-        # O LangGraph vai concatenar isso ao estado
+        # 3. Executa o grafo
         inputs = {"messages": history_objects + [current_human_message]}
         
         result = self.graph.invoke(inputs)
         
-        # 4. Processa o retorno (pega apenas a última mensagem da IA)
+        # 4. Processa o retorno
         last_message = result["messages"][-1]
         content = last_message.content
         
-        # Normalização de resposta
         if isinstance(content, list):
-            text_parts = [item['text'] for item in content if isinstance(item, dict) and 'text' in item]
+            text_parts = []
+            for item in content:
+                if isinstance(item, dict) and 'text' in item:
+                    text_parts.append(item['text'])
+                elif isinstance(item, str):
+                    text_parts.append(item)
             content = "\n".join(text_parts) if text_parts else str(content)
 
         return {"output": [{"role": "assistant", "content": content}]}

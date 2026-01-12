@@ -22,7 +22,7 @@ class ReadNews(BaseTool):
 
     def _run(self, qtde_noticias: int = 10, assuntos: str = "", pais: str = "br") -> str:
         today = date.today()
-        start_date = today - timedelta(days=7)
+        start_date = today - timedelta(days=30)
         query_param = f"q={assuntos}&" if assuntos else ""
         print(f"Filtros: \nQTD: {qtde_noticias}\nAssuntos: {assuntos}\nPaís: {pais}")
         url = (
@@ -76,6 +76,7 @@ class ReadNews(BaseTool):
             
             ## [Título Jornalístico do Grupo]
             **Fontes:** [Lista de Fontes]
+
             **Data:"" [Data da Notícia]
 
             [Parágrafo 1: O que aconteceu, quem, quando e onde...]
