@@ -17,91 +17,71 @@ class CreateEvent(BaseTool):
     name: str = "CriarEvento"
     description: str = """
     Use esta ferramenta quando agendar, criar ou marcar NOVAS reuniões no Google Calendar.
-
     NÃO USE PARA: Verificar disponibilidade ou listar eventos existentes.
-
-    RECURSOS:
-
-    Cria um evento na data/horário especificados.
-    Gera automaticamente um link do Google Meet.
-    Envia convites se “attendees” (participantes) forem informados.
     """
     args_schema: Type[BaseModel] = CreateEventInput
     return_direct: bool = False
 
     def _run(self, meeting_date: Dict[str, Any], description: str, attendees: List[str] = None, meet_length: int = 30, timezone: str = "America/Sao_Paulo"):
         logger.info(f"Iniciando solicitação de agendamento: '{description}'")
-        logger.debug(f"Parâmetros recebidos: data={meeting_date}, duração={meet_length}min, timezeone={timezone}, participantes={attendees}")
+        logger.debug(f"Parâmetros: data={meeting_date}, dur={meet_length}, tz={timezone}, convidados={attendees}")
 
         try:
             service = get_service()
             if not service:
-                logger.error("Falha crítica: Serviço do Google Calendar não retornado (autenticação falhou).")
                 return {"error": "Falha na autenticação do Google Calendar"}
             
-            # Criar objeto de fuso horário
+            # 1. Tratamento robusto de Timezone
             try:
                 tz = ZoneInfo(timezone)
             except Exception as e:
-                logger.error(f"Timezone inválido '{timezone}': {e}. Usando UTC como fallback.")
+                logger.error(f"Timezone inválido '{timezone}'. Usando UTC.")
                 tz = ZoneInfo("UTC")
 
+            # 2. CORREÇÃO CRÍTICA: Normalização de Dicionário/Objeto
+            # O LLM envia dict, mas Pydantic pode converter para obj. Aceitamos os dois.
+            if isinstance(meeting_date, dict):
+                year = meeting_date.get("year")
+                month = meeting_date.get("month")
+                day = meeting_date.get("day")
+                hours = meeting_date.get("hours")
+                minutes = meeting_date.get("minutes")
+            else:
+                year = meeting_date.year
+                month = meeting_date.month
+                day = meeting_date.day
+                hours = meeting_date.hours
+                minutes = meeting_date.minutes
+
             # Construção das datas
-            dt_start = datetime.datetime(
-                meeting_date.year,
-                meeting_date.month,
-                meeting_date.day,
-                meeting_date.hours,
-                meeting_date.minutes,
-                tzinfo=tz 
-            )
-            
+            dt_start = datetime.datetime(year, month, day, hours, minutes, tzinfo=tz)
             dt_end = dt_start + datetime.timedelta(minutes=meet_length)
-            logger.debug(f"Horário calculado (Aware): Início={dt_start}, Fim={dt_end}")
 
             # Montagem do Payload
             event = {
                 "summary": description,
-                "start":{
-                    "dateTime": dt_start.isoformat(),
-                    "timeZone": timezone
-                },
-                "end":{
-                    "dateTime": dt_end.isoformat(),
-                    "timeZone": timezone
-                },
+                "start":{ "dateTime": dt_start.isoformat(), "timeZone": timezone },
+                "end":{ "dateTime": dt_end.isoformat(), "timeZone": timezone },
                 "conferenceData": {
                     "createRequest": {
                         "requestId": str(uuid.uuid4()),
-                        "conferenceSolutionKey": {
-                            "type": "hangoutsMeet" 
-                        }
+                        "conferenceSolutionKey": { "type": "hangoutsMeet" }
                     }
                 },
-                "reminders":{
-                    "useDefault": True
-                }
+                "reminders":{ "useDefault": True }
             }
             
             if attendees:
                 event["attendees"] = [{"email": email} for email in attendees]
-                logger.info(f"Adicionando {len(attendees)} participantes ao evento.")
 
-            logger.debug(f"Payload do evento montado: {event}")
-
-            # Chamada à API do Google
-            logger.info("Enviando requisição para Google Calendar API...")
+            # Chamada à API
             event_result = service.events().insert(
                 calendarId=Settings.google["calendar_id"], 
                 body=event, 
                 conferenceDataVersion=1
             ).execute()
             
-            logger.info(f"Evento criado com sucesso no Google Calendar via API. ID: {event_result.get('id')}")
-
-            # Geração de Resposta com LLM
-            logger.info("Iniciando geração de resposta amigável via LLM.")
-            
+            # Resposta Amigável via LLM Interna
             parser = StrOutputParser()
             llm = ChatGoogleGenerativeAI(
                 model=Settings.gemini["model"],
@@ -110,29 +90,25 @@ class CreateEvent(BaseTool):
 
             prompt = PromptTemplate(
                 template="""
-                ### PAPEL
-                Informar o usuário se deu certo ou não.
+                ### OBJETIVO
+                Analise o JSON de resposta do Google Calendar abaixo e informe ao usuário que o agendamento foi realizado com sucesso.
+                Inclua o dia, horário e o link do Google Meet se houver.
+                Seja breve e direto (estilo secretária eficiente).
 
+                DADOS DO EVENTO:
                 {query}
                 """,
                 input_variables=["query"]
             )
 
             chain = prompt | llm | parser
-
-            start = time.time()
             resposta = chain.invoke({"query": event_result})
-            end = time.time()
-
-            logger.info(f"Resposta da LLM gerada em {(end-start):.2f}s")
-            logger.debug(f"Conteúdo da resposta LLM: {resposta}")
             
             return resposta
 
         except Exception as e:
-            # logger.exception grava automaticamente o stack trace completo do erro
-            logger.exception("Ocorreu um erro durante o processo de agendamento.")
-            return {"error": str(e)}
+            logger.exception("Erro no CreateEvent")
+            return {"error": f"Erro técnico ao criar evento: {str(e)}"}
         
 
 class CheckCalendar(BaseTool):
