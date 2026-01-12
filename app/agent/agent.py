@@ -5,6 +5,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, System
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.chat_models import ChatMaritalk
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -36,6 +37,13 @@ class AgentFactory:
             self.llm = ChatAnthropic(
                 api_key=Settings.claude["api_key"],
                 model=Settings.claude["model"],
+                temperature=0.7
+            )
+        
+        if llm == "gpt":
+            self.llm = ChatOpenAI(
+                api_key=Settings.openai["api_key"],
+                model=Settings.openai["model"],
                 temperature=0.7
             )
         

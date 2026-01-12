@@ -11,6 +11,7 @@ langgraph
 
 # LLM providers
 langchain-anthropic
+langchain-openai
 langchain-google-genai
 
 # RAG
@@ -21,3 +22,4 @@ google-generativeai
 # Others
 pypdf
 streamlit>=1.29.0
+google-api-python-client

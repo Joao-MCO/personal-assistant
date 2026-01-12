@@ -39,6 +39,11 @@ class Settings:
         "model": get_secret("CLAUDE_MODEL")
     }
 
+    openai = {
+        "api_key": get_secret("OPENAI_API_KEY"),
+        "model": get_secret("OPENAI_MODEL")
+    }
+
     chroma = {
         "api_key": get_secret("CHROMA_API_KEY"),
         "tenant": get_secret("CHROMA_TENANT"),
@@ -49,3 +54,5 @@ class Settings:
     gnews_api_key = get_secret("GNEWS_API_KEY")
     max_tokens = get_secret("MAX_TOKENS")
     temperature = get_secret("TEMPERATURE")
+
+    orchestrator = get_secret("ORCHESTRATOR_MODEL")
