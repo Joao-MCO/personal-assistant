@@ -1,4 +1,4 @@
-from tools.google_tools import CheckEmail, CreateEvent, CheckCalendar
+from tools.google_tools import CheckEmail, CreateEvent, CheckCalendar, SendEmail
 from tools.general import RPGQuestion
 from tools.news import ReadNews
 from tools.codes import CodeHelper
@@ -11,6 +11,7 @@ shark = SharkHelper()
 create_event = CreateEvent()
 check_calendar = CheckCalendar()
 check_email = CheckEmail()
+send_email = SendEmail()
 
 agent_tools = [
     news_tool,
@@ -19,5 +20,6 @@ agent_tools = [
     shark,
     create_event,
     check_calendar,
-    check_email
+    check_email,
+    send_email
 ]

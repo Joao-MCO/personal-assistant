@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, PrivateAttr
 from langchain_core.tools import BaseTool
 import requests
-from models.tools import CheckCalendarInput, CheckEmailInput, CreateEventInput
+from models.tools import CheckCalendarInput, CheckEmailInput, CreateEventInput, SendEmailInput
 
 logger = logging.getLogger(__name__)
 
@@ -339,3 +339,47 @@ class CheckEmail(BaseTool):
             # if images: body_text += "\n\n[Imagens encontradas]: " + ", ".join(images)
 
         return body_text
+
+class SendEmail(BaseTool):
+    name: str = "EnviarEmail"
+    description: str = "Enviar email para outra pessoa."
+    args_schema: Type[BaseModel] = SendEmailInput
+    return_direct: bool = False
+
+    _user_credentials: Any = PrivateAttr(default=None)
+
+    def set_credentials(self, creds):
+        self._user_credentials = creds
+    
+    def _run(self,  to: str, subject: str, body: str, body_type: str ='plain'):
+        from services.google_services import get_service
+
+        if not self._user_credentials:
+            return "Erro: Usuário não logado."
+
+        service = get_service(self._user_credentials, "gmail")
+        if not service:
+            return "Erro técnico ao autenticar no Gmail."
+
+        try:
+            message = MIMEMultipart()
+            message['to'] = to
+            message['subject'] = subject
+
+            if body_type.lower() not in ['plain', 'html']:
+                raise ValueError('body_type deve ser `plain` ou `html`')
+            
+            message.attach(MIMEText(body, body_type.lower()))
+
+            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+
+            sent_message = service.users().messages().send(
+                userId='me',
+                body={'raw': raw_message}
+            ).execute()
+
+            return sent_message
+        except Exception as e:
+            return f"Erro ao consultar email: {str(e)}"
+
+    

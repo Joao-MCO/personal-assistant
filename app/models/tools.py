@@ -43,3 +43,9 @@ class CheckEmailInput(BaseModel):
     query: Optional[str] = Field(default=None, description="Palavra-chave ou frase para buscar no assunto ou corpo do email.")
     data_inicio: Optional[str] = Field(default=None, description="Data inicial para o filtro (formato YYYY/MM/DD).")
     data_fim: Optional[str] = Field(default=None, description="Data final para o filtro (formato YYYY/MM/DD).")
+
+class SendEmailInput(BaseModel):
+    to: str = Field(description="O endereço de email do destinatário (ex: usuario@exemplo.com).")
+    subject: str = Field(description="O assunto ou título do email.")
+    body: str = Field(description="O conteúdo principal da mensagem a ser enviada.")
+    body_type: str = Field(default='plain', description="O formato do corpo do email. Use 'html' para formatação rica ou 'plain' para texto puro.")

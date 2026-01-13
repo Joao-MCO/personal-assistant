@@ -12,7 +12,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from tools.google_tools import CheckCalendar, CheckEmail, CreateEvent
+from tools.google_tools import CheckCalendar, CheckEmail, CreateEvent, SendEmail
 from utils.settings import Settings
 from tools.manager import agent_tools
 
@@ -28,10 +28,12 @@ class AgentFactory:
         self.create_event_tool = CreateEvent()
         self.check_calendar_tool = CheckCalendar()
         self.check_email_tool = CheckEmail()
+        self.send_email_tool = SendEmail()
         self.session_tools = global_tools + [
             self.create_event_tool,
             self.check_calendar_tool,
             self.check_email_tool,
+            self.send_email_tool
 ]
 
         
@@ -117,7 +119,7 @@ class AgentFactory:
             
             ### 🛠️ REGRAS DE SELEÇÃO DE FERRAMENTAS
             1. **Agenda/Reuniões:** Use `ConsultarAgenda` ou `CriarEvento`.
-            2. **Emails/Ticket Blip:** Use `ConsultarEmail`.
+            2. **Emails/Ticket Blip:** Use `ConsultarEmail` ou `EnviarEmail`.
             3. **Notícias:** Use `LerNoticias`.
             4. **RPG/D&D:** Use `DuvidasRPG`.
             5. **Códigos:** Use `AjudaProgramacao`
@@ -127,6 +129,7 @@ class AgentFactory:
             ### ⚙️ INSTRUÇÕES GERAIS
             - Se faltar email, procure na lista ou use o padrão `@sharkdev.com.br`.
             - Seja proativa e educada.
+            - Quando criar um evento ou enviar um email, retorne um resumo dos parâmetros usados. 
         """
 
         self.prompt = ChatPromptTemplate.from_messages([
@@ -158,7 +161,7 @@ class AgentFactory:
             messages = state["messages"]
             last_message = messages[-1]
             if isinstance(last_message, ToolMessage):
-                if last_message.name in ["CriarEvento","ConsultarAgenda", "LerNoticias", "ConsultarEmail"]:
+                if last_message.name in ["CriarEvento","ConsultarAgenda", "LerNoticias", "ConsultarEmail", "EnviarEmail"]:
                     return "agent"
                 
                 if last_message.name in [ "RPGQuestion", "AjudaShark", "CodeHelper"]:
@@ -206,6 +209,7 @@ class AgentFactory:
             self.create_event_tool.set_credentials(user_credentials)
             self.check_calendar_tool.set_credentials(user_credentials)
             self.check_email_tool.set_credentials(user_credentials)
+            self.send_email_tool.set_credentials(user_credentials)
 
         
         try:
