@@ -32,32 +32,29 @@ class MemoryGoogleAuth:
         ]
         
     def get_flow(self):
-        return Flow.from_client_config(
+        flow = Flow.from_client_config(
             self.client_config,
             scopes=self.SCOPES,
-            redirect_uri=self.redirect_uri
+            redirect_uri=self.redirect_uri,
         )
+
+        # DESATIVA PKCE (OBRIGATÓRIO NO STREAMLIT)
+        flow._oauth2session._client.code_challenge_method = None
+
+        return flow
+
 
     def login(self):
         flow = self.get_flow()
-
         auth_url, state = flow.authorization_url(
             access_type="offline",
             prompt="consent",
-            include_granted_scopes="true",
         )
 
-        # ESSENCIAL: salvar state
         st.session_state["oauth_state"] = state
-
         st.link_button("Conectar Google Calendar", auth_url)
 
-
     def check_authentication(self):
-        if st.session_state.get("connected"):
-            st.query_params.clear()
-            return
-
         code = st.query_params.get("code")
         state = st.query_params.get("state")
 
@@ -69,15 +66,14 @@ class MemoryGoogleAuth:
         if isinstance(state, list):
             state = state[0]
 
+        if state != st.session_state.get("oauth_state"):
+            st.warning("Estado OAuth inválido")
+            return
+
         try:
             flow = self.get_flow()
-            flow.redirect_uri = Settings.auth["redirect_uri"]
-
-            # VALIDA O STATE
-            if state != st.session_state.get("oauth_state"):
-                raise ValueError("State OAuth inválido")
-
             flow.fetch_token(code=code)
+
             creds = flow.credentials
 
             st.session_state["google_creds"] = {
@@ -94,10 +90,8 @@ class MemoryGoogleAuth:
             st.rerun()
 
         except Exception:
-            logger.exception("Erro no OAuth")
-            st.session_state["connected"] = False
-            st.query_params.clear()
-            st.warning("Falha na autenticação. Clique em conectar novamente.")
+            logger.exception("Erro OAuth")
+            st.warning("Falha na autenticação")
 
 
 
