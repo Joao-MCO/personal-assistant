@@ -6,6 +6,7 @@
 ![Streamlit](https://img.shields.io/badge/Frontend-Streamlit-FF4B4B?style=for-the-badge&logo=streamlit)
 ![LangChain](https://img.shields.io/badge/Orchestrator-LangGraph-1C3C3C?style=for-the-badge&logo=langchain)
 ![Gemini](https://img.shields.io/badge/Brain-Gemini%201.5-4285F4?style=for-the-badge&logo=google-gemini)
+![OpenAI](https://img.shields.io/badge/Built%20with-OpenAI%20GPT--4o-purple?style=flat-square&logo=openai&logoColor=white)
 
 ---
 
@@ -36,9 +37,9 @@ A Cidinha atua como uma agente autónoma que seleciona a ferramenta correta para
 O projeto integra diversos LLMs para aproveitar o melhor de cada um:
 
 * **Orquestração:** [LangGraph](https://langchain-ai.github.io/langgraph/) (StateGraph).
-* **LLM Principal (Agente):** Google Gemini 1.5 Flash.
-* **LLM Coding:** Anthropic Claude 3.
-* **LLM PT-BR:** Maritaca AI (Sabiá-2).
+* **LLM Principais (Agente):** Google Gemini 3 Flash e GPT 5 Nano.
+* **LLM Coding:** Anthropic Claude 4 Haiku.
+* **LLM PT-BR:** Maritaca AI (Sabiazinho-4).
 * **Vector DB:** ChromaDB com Google Generative AI Embeddings.
 * **Interface:** Streamlit com CSS personalizado.
 
@@ -59,16 +60,21 @@ pip install -r requirements.txt
 Crie um ficheiro .env na raiz ou configure os secrets do Streamlit com as seguintes chaves:
 
 ```Ini, TOML
+ORCHESTRATOR_MODEL="gpt" | "gemini" | "claude" | "maritaca"
+
 # Modelos de IA
 GEMINI_API_KEY="sua_chave"
-GEMINI_MODEL="gemini-1.5-flash"
+GEMINI_MODEL="gemini-3-flash-preview"
 GEMINI_EMBEDDING_MODEL="models/embedding-001"
 
 CLAUDE_API_KEY="sua_chave"
-CLAUDE_MODEL="claude-3-5-sonnet-20240620"
+CLAUDE_MODEL="claude-haiku-4-5-20251001"
 
 MARITACA_API_KEY="sua_chave"
-MARITACA_MODEL="sabia-2-medium"
+MARITACA_MODEL="sabiazinho-4"
+
+OPENAI_MODEL="gpt-5-nano"
+OPENAI_API_KEY="sua_chave"
 
 # Ferramentas Externas
 GNEWS_API_KEY="sua_chave"
