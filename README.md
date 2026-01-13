@@ -9,7 +9,7 @@
 ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
 
 ![Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google%20gemini&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI%20GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI%20GPT--5-412991?style=for-the-badge&logo=openai&logoColor=white)
 ![Claude](https://img.shields.io/badge/Anthropic%20Claude-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
 
 </div>
@@ -26,7 +26,7 @@ A Cidinha atua como uma agente autónoma que seleciona a ferramenta correta para
 * **👥 Contactos:** Reconhece automaticamente os e-mails da equipa SharkDev para facilitar o envio.
 
 ### 💻 Desenvolvimento
-* **🤖 Pair Programmer:** Utiliza o modelo **Claude 3** para gerar código, refatorar scripts e explicar conceitos de programação.
+* **🤖 Pair Programmer:** Utiliza o modelo **Claude 4** para gerar código, refatorar scripts e explicar conceitos de programação.
 * **🦈 Shark Helper:** Um mentor especializado para dúvidas internas sobre a SharkDev, Blip e bots, utilizando RAG (Retrieval-Augmented Generation).
 
 ### 📰 Informação & Lazer
