@@ -43,7 +43,7 @@ class MemoryGoogleAuth:
             access_type="offline",
             prompt="consent",
         )
-        st.link_button("Conectar Google Calendar", auth_url)
+        st.link_button("Conectar Google", auth_url)
 
     def check_authentication(self):
         code = st.query_params.get("code")
@@ -158,6 +158,7 @@ def main():
             st.warning("Faça login para usar a Agenda.")
         else:
             user_info = st.session_state.get("user_info", {})
+            print(user_info)
             st.success(f"Olá, **{user_info.get('name', 'Usuário')}**!")
             
             if st.button("Sair"):
