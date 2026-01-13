@@ -62,7 +62,7 @@ cd cidinha-sharkdev
 pip install -r requirements.txt
 ```
 
-###2. Variáveis de Ambiente
+### 2. Variáveis de Ambiente
 Crie um ficheiro .env na raiz ou configure os secrets do Streamlit com as seguintes chaves:
 
 ```Ini, TOML
@@ -96,6 +96,10 @@ GOOGLE_CLIENT_ID="seu_client_id"
 GOOGLE_CLIENT_SECRET='{"web":{...}}' # JSON string ou caminho para ficheiro
 AUTH_REDIRECT_URI="http://localhost:8501"
 AUTH_COOKIE_SECRET="string_aleatoria"
+
+# Configurações
+MAX_TOKENS=4000
+TEMPERATURE=0.4
 ```
 
 ### 3. Execução
