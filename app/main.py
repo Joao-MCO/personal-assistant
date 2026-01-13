@@ -41,8 +41,16 @@ class MemoryGoogleAuth:
 
 
     def login(self):
+        # Se já voltou do Google, NÃO iniciar OAuth
+        if "code" in st.query_params:
+            return
+
+        # Se OAuth já foi iniciado, não reiniciar
         if "oauth_state" in st.session_state:
-            # OAuth já iniciado, não gerar outro
+            st.link_button(
+                "Conectar Google Calendar",
+                st.session_state["oauth_auth_url"]
+            )
             return
 
         flow = self.get_flow()
@@ -60,11 +68,12 @@ class MemoryGoogleAuth:
 
 
 
+
     def check_authentication(self):
         code = st.query_params.get("code")
         state = st.query_params.get("state")
 
-        if not code:
+        if not code or not state:
             return
 
         if isinstance(code, list):
@@ -73,19 +82,13 @@ class MemoryGoogleAuth:
             state = state[0]
 
         if state != st.session_state.get("oauth_state"):
+            logger.error("State recebido != state salvo")
             st.warning("Estado OAuth inválido")
             return
 
-        st.session_state.pop("oauth_state", None)
-        st.session_state.pop("oauth_code_verifier", None)
-        st.session_state.pop("oauth_auth_url", None)
-
-
         try:
             flow = self.get_flow()
-
-            # RESTAURA O PKCE
-            flow.code_verifier = st.session_state.get("oauth_code_verifier")
+            flow.code_verifier = st.session_state["oauth_code_verifier"]
 
             flow.fetch_token(code=code)
             creds = flow.credentials
@@ -100,20 +103,18 @@ class MemoryGoogleAuth:
             }
 
             st.session_state["connected"] = True
-            st.query_params.clear()
 
-            # LIMPA ESTADO TEMPORÁRIO
+            # 🔥 LIMPEZA SOMENTE APÓS SUCESSO
             st.session_state.pop("oauth_state", None)
             st.session_state.pop("oauth_code_verifier", None)
+            st.session_state.pop("oauth_auth_url", None)
 
+            st.query_params.clear()
             st.rerun()
 
         except Exception:
             logger.exception("Erro OAuth")
             st.warning("Falha na autenticação")
-
-
-
 
     def logout(self):
         """Limpa a sessão."""
@@ -194,8 +195,11 @@ def main():
         st.markdown("### Acesso")
         
         if not st.session_state.get('connected', False):
-            auth.login() 
+            if "code" not in st.query_params:
+                auth.login()
+
             st.warning("Faça login para usar a Agenda.")
+
         else:
             user_info = st.session_state.get('user_info', {})
             user_name = user_info.get('name', 'Usuário')
