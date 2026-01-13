@@ -5,8 +5,9 @@ from utils.settings import Settings
 def init_session_state():
     """Inicializa as variáveis de estado da sessão"""
     if 'factory' not in st.session_state:
-        # Assumindo que AgentFactory usa 'gemini' por padrão conforme seu código original
-        st.session_state.factory = AgentFactory(llm=Settings.orchestrator)
+        # CORREÇÃO: Usa "gemini" se Settings.orchestrator for None ou vazio
+        model_to_use = Settings.orchestrator or "gemini"
+        st.session_state.factory = AgentFactory(llm=model_to_use)
         
     if 'messages' not in st.session_state:
         st.session_state['messages'] = []

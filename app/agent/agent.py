@@ -31,14 +31,13 @@ class AgentFactory:
         # 3. Criar lista final de ferramentas desta sessão
         self.session_tools = global_tools + [self.create_event_tool, self.check_calendar_tool]
         
+        # --- CORREÇÃO DE SEGURANÇA ---
+        # Se llm for None ou vazio, força o padrão "gemini"
+        if not llm:
+            llm = "gemini"
+            
         # Configuração do Modelo
-        if llm == "gemini":
-            self.llm = ChatGoogleGenerativeAI(
-                api_key=Settings.gemini["api_key"],
-                model=Settings.gemini["model"],
-                temperature=0.4 
-            )
-        elif llm == "maritaca":
+        if llm == "maritaca":
             self.llm = ChatMaritalk(
                 api_key=Settings.maritaca["api_key"],
                 model=Settings.maritaca["model"],
@@ -56,7 +55,16 @@ class AgentFactory:
                 model=Settings.openai["model"],
                 temperature=0.7
             )
+        else:
+            # Fallback (Else) para Gemini: 
+            # Captura "gemini" OU qualquer valor desconhecido/nulo que tenha passado
+            self.llm = ChatGoogleGenerativeAI(
+                api_key=Settings.gemini["api_key"],
+                model=Settings.gemini["model"],
+                temperature=0.4 
+            )
 
+        # Agora self.llm existe garantidamente
         self.llm_with_tools = self.llm.bind_tools(self.session_tools)
         
         # O nó de ferramentas deve usar a lista da sessão
@@ -199,7 +207,6 @@ class AgentFactory:
             current_content.append({"type": "text", "text": "..."})
         
         # --- INJEÇÃO DE CREDENCIAIS ---
-        # Passa as credenciais vindas do main.py para as ferramentas específicas desta sessão
         if user_credentials:
             self.create_event_tool.set_credentials(user_credentials)
             self.check_calendar_tool.set_credentials(user_credentials)
