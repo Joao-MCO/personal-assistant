@@ -3,6 +3,8 @@ import uuid
 import logging
 import os
 import base64
+from bs4 import BeautifulSoup
+import base64
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -11,6 +13,7 @@ from typing import Any, Dict, List, Type
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, PrivateAttr
 from langchain_core.tools import BaseTool
+import requests
 from models.tools import CheckCalendarInput, CheckEmailInput, CreateEventInput
 
 logger = logging.getLogger(__name__)
@@ -193,7 +196,7 @@ class CheckCalendar(BaseTool):
 
 class CheckEmail(BaseTool):
     name: str = "ConsultarEmail"
-    description: str = "Consultar emails da caixa de entrada;"
+    description: str = "Consultar emails da caixa de entrada com filtros opcionais de data e texto."
     args_schema: Type[BaseModel] = CheckEmailInput
     return_direct: bool = False
 
@@ -202,9 +205,9 @@ class CheckEmail(BaseTool):
     def set_credentials(self, creds):
         self._user_credentials = creds
     
-    def _run(self, max_results=5):
+    def _run(self, max_results: int = 5, query: str = None, data_inicio: str = None, data_fim: str = None):
         from services.google_services import get_service
-        import base64
+        from datetime import datetime, timedelta # Importação necessária para corrigir a data
 
         if not self._user_credentials:
             return "Erro: Usuário não logado."
@@ -214,22 +217,55 @@ class CheckEmail(BaseTool):
             return "Erro técnico ao autenticar no Gmail."
 
         try:
+            filtros = []
+            
+            # --- Correção Inteligente de Datas ---
+            # Se o LLM mandar a mesma data para inicio e fim (ex: buscar emails "do dia 13"),
+            # o Gmail retornaria vazio pois 'before' é exclusivo.
+            # Aqui nós empurramos o 'before' para o dia seguinte automaticamente.
+            if data_inicio and data_fim and data_inicio == data_fim:
+                try:
+                    # Tenta converter para somar 1 dia
+                    dt_fim = datetime.strptime(data_fim, "%Y/%m/%d")
+                    dt_fim_ajustada = dt_fim + timedelta(days=1)
+                    data_fim = dt_fim_ajustada.strftime("%Y/%m/%d")
+                except ValueError:
+                    pass # Se formato estiver errado, segue o padrão sem crashar
+
+            # 1. Filtro por palavra-chave
+            if query:
+                # Removemos as aspas duplas forçadas para tornar a busca mais flexível
+                # (ex: achar "the news" mesmo se o sender for "the news ☕")
+                filtros.append(f'{query}') 
+            
+            # 2. Filtros de Data
+            if data_inicio:
+                filtros.append(f"after:{data_inicio}")
+            
+            if data_fim:
+                filtros.append(f"before:{data_fim}")
+
+            query_string = " ".join(filtros) if filtros else None
+
+            # --- Chamada da API ---
             results = service.users().messages().list(
                 userId='me',
                 labelIds=['INBOX'],
+                q=query_string, 
                 maxResults=max_results
             ).execute()
 
             messages = results.get('messages', [])
             
             if not messages:
-                return "Nenhum e-mail encontrado na caixa de entrada."
+                msg_retorno = "Nenhum e-mail encontrado na caixa de entrada"
+                if query_string:
+                    msg_retorno += f" com os filtros: {query_string}"
+                return msg_retorno + "."
 
             emails_completos = []
 
-            # 2. Iterar sobre os IDs para buscar o conteúdo real
             for msg in messages:
-                # 'format=full' traz o corpo e cabeçalhos
                 msg_detail = service.users().messages().get(
                     userId='me', 
                     id=msg['id'], 
@@ -239,14 +275,11 @@ class CheckEmail(BaseTool):
                 payload = msg_detail.get('payload', {})
                 headers = payload.get('headers', [])
 
-                # Extrair Assunto e Remetente
                 subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'Sem Assunto')
                 sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Desconhecido')
-                
-                # Extrair o corpo (usando sua lógica, ajustada para ser método estático ou self)
                 body = self._extract_body(payload)
 
-                emails_completos.append(f"De: {sender}\nAssunto: {subject}\nCorpo: {body[:500]}...") # Limitei a 500 chars para não estourar o contexto
+                emails_completos.append(f"De: {sender}\nAssunto: {subject}\nCorpo: {body[:500]}...") 
 
             return "\n\n---\n\n".join(emails_completos)
 
@@ -255,19 +288,54 @@ class CheckEmail(BaseTool):
 
     def _extract_body(self, payload):
         import base64
-        body = '<Conteúdo de texto não disponível>'
+        from bs4 import BeautifulSoup
         
-        if 'parts' in payload:
-            for part in payload['parts']:
-                if part['mimeType'] == 'multipart/alternative':
-                    for subpart in part['parts']:
-                        if subpart['mimeType'] == "text/plain" and 'data' in subpart['body']:
-                            body = base64.urlsafe_b64decode(subpart['body']['data']).decode('utf-8')
-                            break
-                elif part['mimeType'] == "text/plain" and 'data' in part['body']:
-                    body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
-                    break
-        elif 'body' in payload and 'data' in payload['body']:
-            body = base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8')
+        body_text = '<Conteúdo de texto não disponível>'
+        plain_text = None
+        html_text = None
+
+        # Função auxiliar para decodificar
+        def decode_data(data):
+            if not data: return None
+            return base64.urlsafe_b64decode(data).decode('utf-8')
+
+        # Lista plana para facilitar a busca (caso haja aninhamento de parts)
+        parts_queue = [payload]
+        
+        while parts_queue:
+            part = parts_queue.pop(0)
             
-        return body
+            # Se tiver sub-partes, adiciona na fila para processar
+            if 'parts' in part:
+                parts_queue.extend(part['parts'])
+                continue
+
+            mime_type = part.get('mimeType')
+            body_data = part.get('body', {}).get('data')
+
+            if not body_data:
+                continue
+
+            decoded_text = decode_data(body_data)
+
+            if mime_type == 'text/plain':
+                plain_text = decoded_text
+            elif mime_type == 'text/html':
+                html_text = decoded_text
+
+        # LÓGICA DE PRIORIDADE:
+        # 1. Se tiver texto puro, usamos ele (é mais limpo para LLMs).
+        # 2. Se não tiver, tentamos converter o HTML para texto.
+        if plain_text:
+            body_text = plain_text
+        elif html_text:
+            # Usa BeautifulSoup para extrair texto do HTML
+            soup = BeautifulSoup(html_text, 'html.parser')
+            # separator='\n' garante que títulos e parágrafos não fiquem colados
+            body_text = soup.get_text(separator='\n', strip=True)
+            
+            # (Opcional) Tentar pegar links de imagens se for muito importante
+            # images = [img['src'] for img in soup.find_all('img', src=True)]
+            # if images: body_text += "\n\n[Imagens encontradas]: " + ", ".join(images)
+
+        return body_text

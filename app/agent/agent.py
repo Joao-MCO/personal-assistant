@@ -158,7 +158,7 @@ class AgentFactory:
             messages = state["messages"]
             last_message = messages[-1]
             if isinstance(last_message, ToolMessage):
-                if last_message.name in ["CriarEvento","ConsultarAgenda", "LerNoticias"]:
+                if last_message.name in ["CriarEvento","ConsultarAgenda", "LerNoticias", "ConsultarEmail"]:
                     return "agent"
                 
                 if last_message.name in [ "RPGQuestion", "AjudaShark", "CodeHelper"]:
