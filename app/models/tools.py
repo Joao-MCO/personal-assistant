@@ -37,4 +37,4 @@ class CreateEventInput(BaseModel):
 class CheckCalendarInput(BaseModel):
     start_date: DateParts = Field(description="Data, Horas e Minutos iniciais do filtro de pesquisa")
     end_date: DateParts = Field(description="Data, Horas e Minutos finais do filtro de pesquisa")
-    emails: List[str] = Field(description="Lista de e-mails.")
+    email: str = Field(description="Email a ser verificado.")

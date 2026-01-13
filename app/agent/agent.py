@@ -11,6 +11,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from tools.google import CheckCalendar, CreateEvent
 from utils.settings import Settings
 from tools.manager import agent_tools
 
@@ -19,13 +20,23 @@ class AgentState(TypedDict):
 
 class AgentFactory:
     def __init__(self, llm="gemini"):
+        # 1. REMOVER as versões globais das ferramentas do Google
+        # para evitar conflito entre usuários (single-session)
+        global_tools = [t for t in agent_tools if t.name not in ["CriarEvento", "ConsultarAgenda"]]
+        
+        # 2. INSTANCIAR novas ferramentas exclusivas para este agente
+        self.create_event_tool = CreateEvent()
+        self.check_calendar_tool = CheckCalendar()
+        
+        # 3. Criar lista final de ferramentas desta sessão
+        self.session_tools = global_tools + [self.create_event_tool, self.check_calendar_tool]
         
         # Configuração do Modelo
         if llm == "gemini":
             self.llm = ChatGoogleGenerativeAI(
                 api_key=Settings.gemini["api_key"],
                 model=Settings.gemini["model"],
-                temperature=0.4  # Reduzi a temperatura para focar na execução de ferramentas
+                temperature=0.4 
             )
         elif llm == "maritaca":
             self.llm = ChatMaritalk(
@@ -45,17 +56,16 @@ class AgentFactory:
                 model=Settings.openai["model"],
                 temperature=0.7
             )
-        
-        # --- VINCULAÇÃO CORRETA ---
-        # Apenas o bind é necessário. O modelo lerá a definição da classe Pydantic automaticamente.
-        self.llm_with_tools = self.llm.bind_tools(agent_tools)
-        self.tools = agent_tools
 
-        # 1. CARREGAR E-MAILS (Com a correção de escape do JSON)
+        self.llm_with_tools = self.llm.bind_tools(self.session_tools)
+        
+        # O nó de ferramentas deve usar a lista da sessão
+        self.tools = self.session_tools
+
+        # 1. CARREGAR E-MAILS
         try:
             with open("app/assets/emails.json", "r", encoding="utf-8") as f:
                 emails_list = json.load(f)
-                # Escapando chaves para não quebrar o PromptTemplate
                 emails_str = json.dumps(emails_list, ensure_ascii=False).replace("{", "{{").replace("}", "}}")
         except Exception as e:
             print(f"Aviso: Não foi possível carregar emails.json: {e}")
@@ -73,7 +83,7 @@ class AgentFactory:
         }
         dia_hoje_pt = dias_pt.get(dia_semana, dia_semana)
 
-        # 3. PROMPT LIMPO (Sem injeção de tools_message)
+        # 3. PROMPT
         template = f"""
             ### 🧠 PERFIL
             Você é a **Cidinha**, assistente virtual executiva da SharkDev.
@@ -86,6 +96,7 @@ class AgentFactory:
             - **Importante:** A ferramenta de calendário exige dia, mês e ano precisos.
 
             ### 📒 LISTA DE CONTATOS
+            Quando estiver pedindo da própria agenda, assuma email = 'primary'.
             {emails_str}
 
             ### ⚙️ INSTRUÇÕES DE EXECUÇÃO
@@ -115,7 +126,6 @@ class AgentFactory:
         def should_continue(state: AgentState):
             messages = state["messages"]
             last_message = messages[-1]
-            # Verifica se o modelo decidiu chamar uma ferramenta
             if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
                 return "continue"
             return "end"
@@ -126,15 +136,10 @@ class AgentFactory:
             
             if isinstance(last_message, ToolMessage):
                 tool_name = last_message.name
-                
-                # CodeHelper e ConsultarAgenda voltam pro agente para ele explicar o resultado
                 if tool_name in ["ConsultarAgenda", "CodeHelper", "SharkHelper", "LerNoticias"]:
                     return "agent"
-
-                # CriarEvento já gera uma resposta final bonita (no google.py), então podemos encerrar
                 if tool_name in ["CriarEvento", "RPGQuestion"]:
                      return "end"
-
             return "agent"
         
         workflow.add_node("agent", call_model)
@@ -167,7 +172,7 @@ class AgentFactory:
                 history.append(AIMessage(content=str(content)))
         return history
 
-    def invoke(self, input_text: str, session_messages: List[dict], uploaded_files: List[dict] = None):
+    def invoke(self, input_text: str, session_messages: List[dict], uploaded_files: List[dict] = None, user_credentials=None):
         history_objects = self._reconstruct_history(session_messages)
         
         current_content = []
@@ -192,28 +197,28 @@ class AgentFactory:
         
         if not current_content:
             current_content.append({"type": "text", "text": "..."})
-
-        inputs = {"messages": history_objects + [HumanMessage(content=current_content)]}
         
-        # Execução do Grafo
+        # --- INJEÇÃO DE CREDENCIAIS ---
+        # Passa as credenciais vindas do main.py para as ferramentas específicas desta sessão
+        if user_credentials:
+            self.create_event_tool.set_credentials(user_credentials)
+            self.check_calendar_tool.set_credentials(user_credentials)
+        
         try:
+            inputs = {"messages": history_objects + [HumanMessage(content=current_content)]}
             result = self.graph.invoke(inputs)
             last_message = result["messages"][-1]
             content = last_message.content
         except Exception as e:
             return {"output": [{"role": "assistant", "content": f"Erro interno no Agente: {str(e)}"}]}
 
-        # Correção de retorno vazio (caso a ferramenta tenha rodado mas o conteúdo não veio)
         if not content:
             if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                 # Se parou numa chamada de ferramenta sem executar o nó 'tools' (erro raro)
-                 content = "Estou tentando acessar a agenda, mas houve uma interrupção técnica."
+                 content = "Estou processando sua solicitação..."
             else:
-                 # Se for ToolMessage, o conteúdo é o output da ferramenta
                  if isinstance(last_message, ToolMessage):
                      content = last_message.content
 
-        # Garantia final de string
         if isinstance(content, list):
             parts = [c.get("text", "") for c in content if isinstance(c, dict)]
             content = " ".join(parts)

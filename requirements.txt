@@ -23,3 +23,4 @@ google-generativeai
 pypdf
 streamlit>=1.29.0
 google-api-python-client
+streamlit-google-auth

@@ -101,15 +101,17 @@ class Settings:
         "host": get_secret("CHROMA_HOST")
     }
 
-    # --- GOOGLE CONFIG ATUALIZADA ---
     google = {
-        # Usa a nova função que lê o arquivo credentials.json automaticamente
-        "auth": get_google_credentials(),
-        
-        "token": get_json_secret("GOOGLE_TOKEN_JSON", None),
-        
-        "calendar_id": get_secret("CALENDAR_ID", "primary"),
-        "scopes": ["https://www.googleapis.com/auth/calendar"]
+        "client_secret": get_secret("GOOGLE_CLIENT_SECRET", "client_secret.json"),
+        "calendar_id": "primary", # Sempre 'primary' pois é o usuário logado
+        "scopes": ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/userinfo.email"]
+    }
+
+    # Configurações do Cookie de Autenticação
+    auth = {
+        "secret": get_secret("AUTH_COOKIE_SECRET", "uma_chave_secreta_aleatoria_muito_longa"),
+        "cookie_name": "google_auth_cookie",
+        "expiry_days": 7
     }
 
     working_days = {
