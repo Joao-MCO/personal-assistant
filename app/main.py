@@ -12,7 +12,6 @@ from utils.settings import Settings
 
 # Configurações para ambiente de desenvolvimento/cloud
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' 
 
 # Configuração de Logger
 logging.basicConfig(level=logging.INFO)
@@ -40,51 +39,43 @@ class MemoryGoogleAuth:
         )
 
     def login(self):
-        """Gera a URL de login e exibe o botão."""
-        try:
-            flow = self.get_flow()
-            import urllib.parse
+        flow = self.get_flow()
 
-            params = {
-                "response_type": "code",
-                "client_id": Settings.auth["client_id"],
-                "redirect_uri": Settings.auth["redirect_uri"],
-                "scope": " ".join(Settings.google["scopes"]),
-                "access_type": "offline",
-                "prompt": "consent",
-            }
+        auth_url, state = flow.authorization_url(
+            access_type="offline",
+            prompt="consent",
+            include_granted_scopes="true",
+        )
 
-            auth_url = "https://accounts.google.com/o/oauth2/auth?" + urllib.parse.urlencode(params)
-            
-            st.markdown(
-                f'<a href="{auth_url}" target="_self" style="background-color:#F551B1; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold; display:block; text-align:center;">Conectar Google Calendar</a>', 
-                unsafe_allow_html=True
-            )
-        except Exception as e:
-            st.error(f"Erro ao gerar link de login: {e}")
+        # ESSENCIAL: salvar state
+        st.session_state["oauth_state"] = state
+
+        st.link_button("Conectar Google Calendar", auth_url)
+
 
     def check_authentication(self):
-        """Processa o retorno do Google OAuth e troca o code por tokens."""
-
-        # Se já estiver conectado, limpa parâmetros residuais
         if st.session_state.get("connected"):
-            if "code" in st.query_params:
-                st.query_params.clear()
+            st.query_params.clear()
             return
 
         code = st.query_params.get("code")
+        state = st.query_params.get("state")
 
         if not code:
             return
 
+        if isinstance(code, list):
+            code = code[0]
+        if isinstance(state, list):
+            state = state[0]
+
         try:
-            # Em alguns casos o Streamlit retorna lista
-            if isinstance(code, list):
-                code = code[0]
-
             flow = self.get_flow()
-
             flow.redirect_uri = Settings.auth["redirect_uri"]
+
+            # VALIDA O STATE
+            if state != st.session_state.get("oauth_state"):
+                raise ValueError("State OAuth inválido")
 
             flow.fetch_token(code=code)
             creds = flow.credentials
@@ -102,11 +93,12 @@ class MemoryGoogleAuth:
             st.query_params.clear()
             st.rerun()
 
-        except Exception as e:
-            logger.exception("Erro no fluxo de autenticação Google OAuth")
+        except Exception:
+            logger.exception("Erro no OAuth")
             st.session_state["connected"] = False
             st.query_params.clear()
             st.warning("Falha na autenticação. Clique em conectar novamente.")
+
 
 
     def logout(self):
