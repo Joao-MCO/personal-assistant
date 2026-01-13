@@ -19,9 +19,6 @@ logging.getLogger('google_auth_oauthlib').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 class MemoryGoogleAuth:
-    """
-    Gerencia autenticação OAuth2 usando dicionários em memória.
-    """
     def __init__(self, client_config, redirect_uri):
         self.client_config = client_config
         self.redirect_uri = redirect_uri
@@ -30,7 +27,7 @@ class MemoryGoogleAuth:
             "https://www.googleapis.com/auth/userinfo.email",
             "openid"
         ]
-        
+
     def get_flow(self):
         return Flow.from_client_config(
             self.client_config,
@@ -38,49 +35,24 @@ class MemoryGoogleAuth:
             redirect_uri=self.redirect_uri,
         )
 
-
-
     def login(self):
-        if "oauth_flow" in st.session_state:
-            return
-
         flow = self.get_flow()
-
-        auth_url, state = flow.authorization_url(
+        auth_url, _ = flow.authorization_url(
             access_type="offline",
             prompt="consent",
         )
-
-        st.session_state["oauth_flow"] = flow
-        st.session_state["oauth_state"] = state
-
         st.link_button("Conectar Google Calendar", auth_url)
 
     def check_authentication(self):
         code = st.query_params.get("code")
-        state = st.query_params.get("state")
-
         if not code:
             return
 
         if isinstance(code, list):
             code = code[0]
-        if isinstance(state, list):
-            state = state[0]
-
-        saved_state = st.session_state.get("oauth_state")
-
-        if state != saved_state:
-            logger.error("State recebido != state salvo")
-            return
-
-        flow = st.session_state.get("oauth_flow")
-
-        if not flow:
-            logger.error("Flow não encontrado na sessão")
-            return
 
         try:
+            flow = self.get_flow()
             flow.fetch_token(code=code)
             creds = flow.credentials
 
@@ -94,25 +66,20 @@ class MemoryGoogleAuth:
             }
 
             st.session_state["connected"] = True
-
-            # LIMPEZA FINAL
-            st.session_state.pop("oauth_flow", None)
-            st.session_state.pop("oauth_state", None)
             st.query_params.clear()
-
             st.rerun()
 
-        except Exception:
+        except Exception as e:
             logger.exception("Erro OAuth")
             st.warning("Falha na autenticação")
 
 
     def logout(self):
-        """Limpa a sessão."""
-        if 'google_creds' in st.session_state:
-            del st.session_state['google_creds']
-        st.session_state['connected'] = False
-        st.session_state['user_info'] = None
+        st.session_state.pop("google_creds", None)
+        st.session_state.pop("user_info", None)
+        st.session_state.pop("user_email", None)
+        st.session_state["connected"] = False
+
 
     @property
     def credentials(self):
@@ -164,7 +131,6 @@ def setup_authentication():
                     user_data = res.json()
                     st.session_state['user_info'] = user_data
                     st.session_state['user_email'] = user_data.get('email')
-                    st.rerun()
             except Exception as e:
                 logger.error(f"Erro ao buscar user info: {e}")
     
@@ -185,17 +151,12 @@ def main():
             
         st.markdown("### Acesso")
         
-        if not st.session_state.get('connected', False):
-            if "code" not in st.query_params:
-                auth.login()
-
+        if not st.session_state.get("connected", False):
+            auth.login()
             st.warning("Faça login para usar a Agenda.")
-
         else:
-            user_info = st.session_state.get('user_info', {})
-            user_name = user_info.get('name', 'Usuário')
-            
-            st.success(f"Olá, **{user_name}**!")
+            user_info = st.session_state.get("user_info", {})
+            st.success(f"Olá, **{user_info.get('name', 'Usuário')}**!")
             
             if st.button("Sair"):
                 auth.logout()
