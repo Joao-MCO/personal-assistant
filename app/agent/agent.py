@@ -2,6 +2,7 @@ import datetime
 import json
 import base64
 import operator
+import streamlit as st # Importante para exibir o erro na tela
 from typing import List, TypedDict, Annotated, Sequence
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -31,7 +32,6 @@ class AgentFactory:
         # 3. Criar lista final de ferramentas desta sessão
         self.session_tools = global_tools + [self.create_event_tool, self.check_calendar_tool]
         
-        # --- CORREÇÃO DE SEGURANÇA ---
         # Se llm for None ou vazio, força o padrão "gemini"
         if not llm:
             llm = "gemini"
@@ -56,15 +56,21 @@ class AgentFactory:
                 temperature=0.7
             )
         else:
-            # Fallback (Else) para Gemini: 
-            # Captura "gemini" OU qualquer valor desconhecido/nulo que tenha passado
+            # Fallback para Gemini
+            api_key = Settings.gemini.get("api_key")
+            
+            # --- BLINDAGEM CONTRA FALTA DE CHAVE ---
+            if not api_key:
+                st.error("🚨 **Erro de Configuração:** API Key do Gemini não encontrada.")
+                st.info("Por favor, adicione `GEMINI_API_KEY` ou `GOOGLE_API_KEY` nas variáveis de ambiente ou Secrets do Streamlit.")
+                st.stop() # Interrompe a execução aqui para não gerar traceback
+                
             self.llm = ChatGoogleGenerativeAI(
-                api_key=Settings.gemini["api_key"],
+                api_key=api_key,
                 model=Settings.gemini["model"],
                 temperature=0.4 
             )
 
-        # Agora self.llm existe garantidamente
         self.llm_with_tools = self.llm.bind_tools(self.session_tools)
         
         # O nó de ferramentas deve usar a lista da sessão

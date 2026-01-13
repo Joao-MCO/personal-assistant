@@ -73,8 +73,11 @@ def get_google_credentials():
 
 class Settings:
     
+    # Tenta pegar GEMINI_API_KEY, se falhar tenta GOOGLE_API_KEY
+    _gemini_key = get_secret("GEMINI_API_KEY") or get_secret("GOOGLE_API_KEY")
+
     gemini = {
-        "api_key": get_secret("GEMINI_API_KEY"),
+        "api_key": _gemini_key,
         "model": get_secret("GEMINI_MODEL", "gemini-1.5-flash"), 
         "embedding": get_secret("GEMINI_EMBEDDING_MODEL")
     }
@@ -111,8 +114,7 @@ class Settings:
     auth = {
         "secret": get_secret("AUTH_COOKIE_SECRET", "uma_chave_secreta_aleatoria_muito_longa"),
         "cookie_name": "google_auth_cookie",
-        "expiry_days": 7,
-        "redirect_uri": get_secret("AUTH_REDIRECT_URI", "http://localhost:8501")
+        "expiry_days": 7
     }
 
     working_days = {
