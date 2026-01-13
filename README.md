@@ -98,8 +98,8 @@ AUTH_REDIRECT_URI="http://localhost:8501"
 AUTH_COOKIE_SECRET="string_aleatoria"
 
 # Configurações
-MAX_TOKENS=4000
-TEMPERATURE=0.4
+MAX_TOKENS="4000"
+TEMPERATURE="0.4"
 ```
 
 ### 3. Execução
