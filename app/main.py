@@ -41,6 +41,10 @@ class MemoryGoogleAuth:
 
 
     def login(self):
+        if "oauth_state" in st.session_state:
+            # OAuth já iniciado, não gerar outro
+            return
+
         flow = self.get_flow()
 
         auth_url, state = flow.authorization_url(
@@ -48,11 +52,12 @@ class MemoryGoogleAuth:
             prompt="consent",
         )
 
-        # SALVAR O NECESSÁRIO DO PKCE
         st.session_state["oauth_state"] = state
         st.session_state["oauth_code_verifier"] = flow.code_verifier
+        st.session_state["oauth_auth_url"] = auth_url
 
         st.link_button("Conectar Google Calendar", auth_url)
+
 
 
     def check_authentication(self):
@@ -70,6 +75,11 @@ class MemoryGoogleAuth:
         if state != st.session_state.get("oauth_state"):
             st.warning("Estado OAuth inválido")
             return
+
+        st.session_state.pop("oauth_state", None)
+        st.session_state.pop("oauth_code_verifier", None)
+        st.session_state.pop("oauth_auth_url", None)
+
 
         try:
             flow = self.get_flow()
