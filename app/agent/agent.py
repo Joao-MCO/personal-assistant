@@ -22,7 +22,7 @@ class AgentState(TypedDict):
 class AgentFactory:
     def __init__(self, llm="gemini"):
         # 1. REMOVER as versões globais das ferramentas do Google
-        global_tools = [t for t in agent_tools if t.name not in ["CriarEvento", "ConsultarAgenda"]]
+        global_tools = [t for t in agent_tools if t.name not in ["CriarEvento", "ConsultarAgenda", "ConsultarEmail", "EnviarEmail"]]
         
         # 2. INSTANCIAR novas ferramentas exclusivas
         self.create_event_tool = CreateEvent()
