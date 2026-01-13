@@ -17,18 +17,20 @@ class CreateEvent(BaseTool):
     args_schema: Type[BaseModel] = CreateEventInput
     return_direct: bool = False
     
-    # Campo privado para guardar as credenciais
     _user_credentials: Any = PrivateAttr(default=None)
 
     def set_credentials(self, creds):
         self._user_credentials = creds
 
     def _run(self, meeting_date: Dict[str, Any], description: str, attendees: List[str] = None, meet_length: int = 30, timezone: str = "America/Sao_Paulo"):
-        # Passa as credenciais injetadas para o serviço
+        # FIX: Checagem antecipada. Se não tem credencial, nem chama o serviço.
+        if not self._user_credentials:
+            return "Erro de Permissão: O usuário não está logado no Google Calendar. Peça para ele fazer login na barra lateral."
+
         service = get_service(self._user_credentials)
         
         if not service:
-            return "Erro: Não consegui autenticar no Google Calendar. Por favor, faça login novamente."
+            return "Erro técnico: Falha ao autenticar no serviço do Google."
 
         try:
             # Tratamento de Data (Dict ou Objeto)
@@ -78,13 +80,16 @@ class CheckCalendar(BaseTool):
         self._user_credentials = creds
 
     def _run(self, email: str, start_date: Any, end_date: Any):
+        # FIX: Checagem antecipada.
+        if not self._user_credentials:
+            return "Erro de Permissão: O usuário não está logado no Google Calendar. Peça para ele fazer login na barra lateral."
+
         service = get_service(self._user_credentials)
         
         if not service:
-            return "Erro: Não autenticado no Google Calendar."
+            return "Erro técnico: Falha ao autenticar no serviço do Google."
         
         try:
-            # Função auxiliar para parsear data
             def parse_dt(d):
                 if isinstance(d, dict): 
                     return datetime.datetime(d['year'], d['month'], d['day'], d['hours'], d['minutes'])
@@ -95,7 +100,6 @@ class CheckCalendar(BaseTool):
 
             all_events = []
             try:
-                # Usa 'primary' para ver a agenda do usuário logado
                 events_result = service.events().list(
                     calendarId=email, 
                     timeMin=start_dt, timeMax=end_dt, singleEvents=True, orderBy='startTime'

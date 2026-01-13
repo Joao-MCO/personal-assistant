@@ -111,7 +111,8 @@ class Settings:
     auth = {
         "secret": get_secret("AUTH_COOKIE_SECRET", "uma_chave_secreta_aleatoria_muito_longa"),
         "cookie_name": "google_auth_cookie",
-        "expiry_days": 7
+        "expiry_days": 7,
+        "redirect_uri": get_secret("AUTH_REDIRECT_URI", "http://localhost:8501")
     }
 
     working_days = {

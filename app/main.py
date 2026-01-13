@@ -1,65 +1,158 @@
 import logging
 import os
+import json
 import requests
 import streamlit as st
-
-# Configurações para evitar erro de escopo e transporte local
-os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' 
-
-from streamlit_google_auth import Authenticate
+import google.oauth2.credentials
+from google_auth_oauthlib.flow import Flow
 from ui.styles import apply_custom_styles
 from ui.render import render_header, render_chat_history, render_upload_warning
 from ui.state import init_session_state
 from utils.settings import Settings
 
-# Configuração de Logger - Limpa ruídos do terminal
+# Configurações para ambiente de desenvolvimento/cloud
+os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' 
+
+# Configuração de Logger
 logging.basicConfig(level=logging.INFO)
+# Silencia logs verbosos do Google
 logging.getLogger('google_auth_oauthlib').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
+# --- CLASSE DE AUTENTICAÇÃO EM MEMÓRIA (Substitui streamlit_google_auth) ---
+class MemoryGoogleAuth:
+    """
+    Gerencia autenticação OAuth2 usando dicionários em memória, 
+    ELIMINANDO a necessidade do arquivo 'client_secret.json'.
+    """
+    def __init__(self, client_config, redirect_uri):
+        self.client_config = client_config
+        self.redirect_uri = redirect_uri
+        self.SCOPES = [
+            "https://www.googleapis.com/auth/calendar",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "openid"
+        ]
+        
+    def get_flow(self):
+        """Cria o fluxo OAuth a partir do dicionário de configuração na memória."""
+        return Flow.from_client_config(
+            self.client_config,
+            scopes=self.SCOPES,
+            redirect_uri=self.redirect_uri
+        )
+
+    def login(self):
+        """Gera a URL de login e exibe o botão."""
+        try:
+            flow = self.get_flow()
+            auth_url, _ = flow.authorization_url(prompt='consent')
+            
+            # Exibe um botão estilizado
+            st.markdown(
+                f'<a href="{auth_url}" target="_self" style="background-color:#F551B1; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold; display:block; text-align:center;">Conectar Google Calendar</a>', 
+                unsafe_allow_html=True
+            )
+        except Exception as e:
+            st.error(f"Erro ao gerar link de login: {e}")
+
+    def check_authentication(self):
+        """Verifica o retorno do Google (código na URL) e troca pelo token."""
+        # Compatibilidade com versões recentes do Streamlit
+        try:
+            query_params = st.query_params
+        except AttributeError:
+            query_params = st.experimental_get_query_params()
+            
+        code = query_params.get("code")
+
+        if code:
+            try:
+                flow = self.get_flow()
+                flow.fetch_token(code=code)
+                creds = flow.credentials
+                
+                # Salva os dados do token na sessão
+                st.session_state['google_creds'] = {
+                    'token': creds.token,
+                    'refresh_token': creds.refresh_token,
+                    'token_uri': creds.token_uri,
+                    'client_id': creds.client_id,
+                    'client_secret': creds.client_secret,
+                    'scopes': creds.scopes
+                }
+                st.session_state['connected'] = True
+                
+                # Limpa a URL para evitar reprocessamento
+                if hasattr(st, 'query_params'):
+                    st.query_params.clear()
+                else:
+                    st.experimental_set_query_params()
+                    
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Erro na autenticação: {e}")
+                st.session_state['connected'] = False
+
+    def logout(self):
+        """Limpa a sessão."""
+        if 'google_creds' in st.session_state:
+            del st.session_state['google_creds']
+        st.session_state['connected'] = False
+        st.session_state['user_info'] = None
+
+    @property
+    def credentials(self):
+        """Reconstrói o objeto Credentials a partir da sessão."""
+        creds_data = st.session_state.get('google_creds')
+        if not creds_data:
+            return None
+        return google.oauth2.credentials.Credentials(**creds_data)
+
+
 def setup_authentication():
     """
-    Configura o fluxo de login OAuth e gerencia a persistência do estado de forma segura.
+    Configura a autenticação usando Settings (Env Vars) e a classe em memória.
     """
-    credentials_path = "client_secret.json"
-    secret_value = Settings.google.get('client_secret')
-
-    # 1. Garante que o arquivo client_secret.json existe
-    if secret_value and isinstance(secret_value, str) and secret_value.strip().startswith("{"):
-        try:
-            with open(credentials_path, "w") as f:
-                f.write(secret_value)
-        except Exception as e:
-            st.error(f"Erro ao criar credenciais temporárias: {e}")
-            st.stop()
-    elif not os.path.exists(credentials_path):
-        st.error("❌ Arquivo 'client_secret.json' não encontrado!")
+    # 1. Busca o JSON de configuração das Settings (Environment ou Secrets)
+    client_secret_data = Settings.google.get('client_secret')
+    
+    if not client_secret_data:
+        # Se não achar a variável, mostra erro de CONFIGURAÇÃO, não de ARQUIVO.
+        st.error("❌ Erro de Configuração: Variável 'GOOGLE_CLIENT_SECRET' ou 'client_secret' não encontrada nos Secrets/.env")
         st.stop()
+        
+    # Se for string (JSON), converte para dict
+    if isinstance(client_secret_data, str):
+        try:
+            client_config = json.loads(client_secret_data)
+        except json.JSONDecodeError:
+            st.error("❌ Erro: O conteúdo de 'client_secret' não é um JSON válido.")
+            st.stop()
+    else:
+        client_config = client_secret_data
 
-    # 2. Inicializa o Authenticator
-    authenticator = Authenticate(
-        secret_credentials_path=credentials_path,
-        cookie_name=Settings.auth['cookie_name'],
-        cookie_key=Settings.auth['secret'],
-        redirect_uri="https://cidinha-shark.streamlit.app", 
+    # 2. Inicializa o Autenticador em Memória
+    auth = MemoryGoogleAuth(
+        client_config=client_config,
+        redirect_uri="https://cidinha-shark.streamlit.app" 
     )
     
-    # 3. Verifica o callback do Google e Cookies
-    authenticator.check_authentification()
+    # 3. Verifica callback do login
+    auth.check_authentication()
     
-    # 4. Sincronização Segura de Estado
-    creds = getattr(authenticator, 'credentials', None)
+    # 4. Recupera credenciais para validar usuário
+    creds = auth.credentials
     
     if creds and creds.valid:
         st.session_state['connected'] = True
-        st.session_state['auth'] = authenticator
         
-        # Se não tiver dados do usuário, busca agora
+        # Busca dados do usuário se ainda não tiver
         if 'user_info' not in st.session_state:
             try:
-                token = creds.token
-                headers = {"Authorization": f"Bearer {token}"}
+                headers = {"Authorization": f"Bearer {creds.token}"}
                 res = requests.get("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", headers=headers)
                 
                 if res.status_code == 200:
@@ -68,23 +161,16 @@ def setup_authentication():
                     st.session_state['user_email'] = user_data.get('email')
                     st.rerun()
             except Exception as e:
-                logger.error(f"Erro ao buscar dados do usuário: {e}")
-    else:
-        # CORREÇÃO CRÍTICA: Se não tem credenciais válidas, força estado desconectado.
-        # Isso evita que o app tente acessar a agenda com credenciais nulas.
-        if st.session_state.get('connected'):
-            st.session_state['connected'] = False
-            st.session_state['user_info'] = None
-            st.rerun()
+                logger.error(f"Erro ao buscar user info: {e}")
     
-    st.session_state['auth'] = authenticator
-    return authenticator
+    return auth
 
 def main():
     st.set_page_config(page_title="Cidinha - SharkDev", page_icon="🦈", layout="centered")
     apply_custom_styles()
     init_session_state()
 
+    # Inicializa autenticação (Sem arquivos!)
     auth = setup_authentication()
     
     with st.sidebar:
@@ -96,6 +182,7 @@ def main():
         st.markdown("### Acesso")
         
         if not st.session_state.get('connected', False):
+            # Chama o login da nossa classe customizada
             auth.login() 
             st.warning("Faça login para usar a Agenda.")
         else:
@@ -106,8 +193,6 @@ def main():
             
             if st.button("Sair"):
                 auth.logout()
-                st.session_state['connected'] = False
-                st.session_state['user_info'] = None
                 st.rerun()
 
     render_header()
@@ -164,13 +249,13 @@ def main():
 
             with st.spinner("A Pamela não vai gostar nada disso..."):
                 try:
-                    # 1. Recupera credenciais da sessão
-                    user_creds = None
-                    if st.session_state.get('connected'):
-                        auth_obj = st.session_state.get('auth')
-                        user_creds = getattr(auth_obj, 'credentials', None)
+                    # 1. Recupera as credenciais diretamente da classe auth
+                    user_creds = auth.credentials
 
-                    # 2. Passa para o agente via 'user_credentials'
+                    if st.session_state.get('connected') and not user_creds:
+                        logger.warning("UI diz conectado, mas credenciais estão vazias.")
+
+                    # 2. Passa para o agente
                     response = st.session_state.factory.invoke(
                         input_text=user_text or "Processar anexos", 
                         session_messages=st.session_state['messages'],
@@ -179,7 +264,6 @@ def main():
                     )
                     
                     outputs = response.get('output', [])
-                    
                     if isinstance(outputs, str): outputs = [{"role": "assistant", "content": outputs}]
                     
                     for resp in outputs:
