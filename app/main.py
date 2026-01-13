@@ -43,7 +43,18 @@ class MemoryGoogleAuth:
         """Gera a URL de login e exibe o botão."""
         try:
             flow = self.get_flow()
-            auth_url, _ = flow.authorization_url(prompt='consent')
+            import urllib.parse
+
+            params = {
+                "response_type": "code",
+                "client_id": Settings.auth["client_id"],
+                "redirect_uri": Settings.auth["redirect_uri"],
+                "scope": " ".join(Settings.google["scopes"]),
+                "access_type": "offline",
+                "prompt": "consent",
+            }
+
+            auth_url = "https://accounts.google.com/o/oauth2/auth?" + urllib.parse.urlencode(params)
             
             st.markdown(
                 f'<a href="{auth_url}" target="_self" style="background-color:#F551B1; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold; display:block; text-align:center;">Conectar Google Calendar</a>', 
@@ -53,49 +64,50 @@ class MemoryGoogleAuth:
             st.error(f"Erro ao gerar link de login: {e}")
 
     def check_authentication(self):
-        """Verifica o retorno do Google e troca pelo token."""
-        
-        # 1. Se já estamos logados, removemos qualquer lixo da URL silenciosamente
-        if st.session_state.get('connected'):
+        """Processa o retorno do Google OAuth e troca o code por tokens."""
+
+        # Se já estiver conectado, limpa parâmetros residuais
+        if st.session_state.get("connected"):
             if "code" in st.query_params:
                 st.query_params.clear()
             return
 
-        # 2. Se não estamos logados, verifica se chegou um código
         code = st.query_params.get("code")
 
-        if code:
-            try:
-                flow = self.get_flow()
-                flow.fetch_token(code=code)
-                creds = flow.credentials
-                
-                # Salva na sessão
-                st.session_state['google_creds'] = {
-                    'token': creds.token,
-                    'refresh_token': creds.refresh_token,
-                    'token_uri': creds.token_uri,
-                    'client_id': creds.client_id,
-                    'client_secret': creds.client_secret,
-                    'scopes': creds.scopes
-                }
-                st.session_state['connected'] = True
-                
-                # SUCESSO: Limpa a URL e recarrega para remover o código visualmente
-                st.query_params.clear()
-                st.rerun()
-                
-            except Exception as e:
-                # Se der erro (ex: invalid_grant por refresh da página), 
-                # limpamos a URL para o usuário poder clicar no botão de novo sem erro.
-                logger.error(f"Erro no fluxo de auth: {e}")
-                st.query_params.clear() # Limpa o código inválido
-                st.session_state['connected'] = False
-                st.warning("A conexão foi redefinida. Por favor, clique em conectar novamente.")
-                # Opcional: st.rerun() se quiser limpar o aviso imediatamente, 
-                # mas melhor deixar o usuário ver o aviso.
+        if not code:
+            return
 
-    # ... métodos logout e credentials mantidos iguais ...
+        try:
+            # Em alguns casos o Streamlit retorna lista
+            if isinstance(code, list):
+                code = code[0]
+
+            flow = self.get_flow()
+
+            flow.redirect_uri = Settings.auth["redirect_uri"]
+
+            flow.fetch_token(code=code)
+            creds = flow.credentials
+
+            st.session_state["google_creds"] = {
+                "token": creds.token,
+                "refresh_token": creds.refresh_token,
+                "token_uri": creds.token_uri,
+                "client_id": creds.client_id,
+                "client_secret": creds.client_secret,
+                "scopes": creds.scopes,
+            }
+
+            st.session_state["connected"] = True
+            st.query_params.clear()
+            st.rerun()
+
+        except Exception as e:
+            logger.exception("Erro no fluxo de autenticação Google OAuth")
+            st.session_state["connected"] = False
+            st.query_params.clear()
+            st.warning("Falha na autenticação. Clique em conectar novamente.")
+
 
     def logout(self):
         """Limpa a sessão."""

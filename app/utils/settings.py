@@ -88,7 +88,9 @@ class AppSettings:
             "secret": get_secret("AUTH_COOKIE_SECRET", "chave_secreta_padrao_segura"),
             "cookie_name": "google_auth_cookie",
             "expiry_days": 7,
-            "redirect_uri": get_secret("AUTH_REDIRECT_URI", "https://cidinha-shark.streamlit.app")
+            "redirect_uri": get_secret("AUTH_REDIRECT_URI", "https://cidinha-shark.streamlit.app"),
+            "client_id": get_secret("GOOGLE_CLIENT_ID")
+            # "client_secret": get_secret("GOOGLE_CLIENT_SECRET")
         }
 
     @property
