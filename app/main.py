@@ -5,9 +5,9 @@ import requests
 import streamlit as st
 import google.oauth2.credentials
 from google_auth_oauthlib.flow import Flow
-from ui.styles import apply_custom_styles
-from ui.render import render_header, render_chat_history, render_upload_warning
-from ui.state import init_session_state
+from interface.styles import apply_custom_styles
+from interface.render import render_header, render_chat_history, render_upload_warning
+from interface.state import init_session_state
 from utils.settings import Settings
 
 # Configurações para ambiente de desenvolvimento/cloud
