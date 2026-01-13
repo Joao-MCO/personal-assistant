@@ -12,7 +12,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from tools.google import CheckCalendar, CreateEvent
+from tools.google_tools import CheckCalendar, CreateEvent
 from utils.settings import Settings
 from tools.manager import agent_tools
 

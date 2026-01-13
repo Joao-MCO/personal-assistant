@@ -19,11 +19,9 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger('google_auth_oauthlib').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
-# --- CLASSE DE AUTENTICAÇÃO EM MEMÓRIA ---
 class MemoryGoogleAuth:
     """
-    Gerencia autenticação OAuth2 usando dicionários em memória, 
-    eliminando a necessidade de arquivos locais.
+    Gerencia autenticação OAuth2 usando dicionários em memória.
     """
     def __init__(self, client_config, redirect_uri):
         self.client_config = client_config
@@ -55,16 +53,15 @@ class MemoryGoogleAuth:
             st.error(f"Erro ao gerar link de login: {e}")
 
     def check_authentication(self):
-        """Verifica o retorno do Google e troca pelo token, tratando erros de código usado."""
+        """Verifica o retorno do Google e troca pelo token."""
         
-        # 1. Se já estamos logados na sessão, ignoramos o código da URL para evitar erro
+        # 1. Se já estamos logados, removemos qualquer lixo da URL silenciosamente
         if st.session_state.get('connected'):
-            # Se ainda tem lixo na URL, limpa silenciosamente
             if "code" in st.query_params:
                 st.query_params.clear()
             return
 
-        # 2. Se não estamos logados, tenta processar o código
+        # 2. Se não estamos logados, verifica se chegou um código
         code = st.query_params.get("code")
 
         if code:
@@ -73,7 +70,7 @@ class MemoryGoogleAuth:
                 flow.fetch_token(code=code)
                 creds = flow.credentials
                 
-                # Salva os dados do token na sessão
+                # Salva na sessão
                 st.session_state['google_creds'] = {
                     'token': creds.token,
                     'refresh_token': creds.refresh_token,
@@ -84,18 +81,21 @@ class MemoryGoogleAuth:
                 }
                 st.session_state['connected'] = True
                 
-                # SUCESSO: Limpa a URL imediatamente e recarrega
+                # SUCESSO: Limpa a URL e recarrega para remover o código visualmente
                 st.query_params.clear()
                 st.rerun()
                 
             except Exception as e:
-                # Se o código for inválido (invalid_grant), não quebra a tela.
-                # Apenas avisa o usuário e limpa a URL para ele tentar de novo.
+                # Se der erro (ex: invalid_grant por refresh da página), 
+                # limpamos a URL para o usuário poder clicar no botão de novo sem erro.
                 logger.error(f"Erro no fluxo de auth: {e}")
-                st.warning("⚠️ A sessão expirou ou o login foi interrompido. Por favor, clique em 'Conectar' novamente.")
-                st.query_params.clear()
+                st.query_params.clear() # Limpa o código inválido
                 st.session_state['connected'] = False
-                # Não damos rerun() aqui para evitar loop infinito, deixamos o botão aparecer.
+                st.warning("A conexão foi redefinida. Por favor, clique em conectar novamente.")
+                # Opcional: st.rerun() se quiser limpar o aviso imediatamente, 
+                # mas melhor deixar o usuário ver o aviso.
+
+    # ... métodos logout e credentials mantidos iguais ...
 
     def logout(self):
         """Limpa a sessão."""
