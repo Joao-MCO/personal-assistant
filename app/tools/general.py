@@ -10,59 +10,6 @@ from pydantic import BaseModel
 from models.tools import GenericQuestionInput, RPGQuestionInput
 from services.chroma import get_collection
 from utils.settings import Settings
-
-class GenericQuestion(BaseTool):
-    name: str = "AssuntosGerais"
-    description: str = """
-    Utilize esta ferramenta sempre que for feita uma pergunta genérica que não se encaixa em outras ferramentas.
-    """
-    args_schema: Type[BaseModel] = GenericQuestionInput
-    return_direct: bool = False
-
-    def _run(self, pergunta: str) -> str:
-        query = pergunta
-
-        parser = StrOutputParser()
-        llm = ChatGoogleGenerativeAI(
-            model=Settings.gemini["model"],
-            api_key=Settings.gemini["api_key"]
-        )
-
-        prompt = PromptTemplate(
-            template="""
-            ### PAPEL
-            Você é um Assistente de Inteligência Artificial versátil, inteligente e prestativo. Seu objetivo é resolver as dúvidas do usuário de forma clara, precisa e eficiente.
-
-            ### DIRETRIZES DE RESPOSTA
-            1.  **Objetividade:** Vá direto ao ponto. Evite preâmbulos desnecessários como "Essa é uma ótima pergunta".
-            2.  **Formatação (Markdown):**
-                * Use **negrito** para destacar conceitos-chave ou partes importantes.
-                * Use listas (bullets) para enumerar itens ou passos.
-            3.  **Tom de Voz:** Profissional, mas acessível e empático. Adapte-se ao usuário:
-                * Se a pergunta for técnica, seja técnico.
-                * Se a pergunta for simples, seja didático.
-            4.  **Honestidade Intelectual:** Se você não souber a resposta ou se a pergunta for sobre um evento muito recente (que você não tenha acesso), informe suas limitações educadamente.
-
-            ### ESTRUTURA IDEAL
-            * **Resumo Inicial:** Uma frase direta respondendo à pergunta.
-            * **Explicação/Detalhes:** O desenvolvimento da resposta (use parágrafos curtos).
-            * **Exemplos (se aplicável):** Ilustre a explicação para facilitar o entendimento.
-
-            ### ENTRADA DO USUÁRIO
-            {query}
-            """,
-            input_variables=["query"]
-        )
-
-        chain = prompt | llm | parser
-
-        start = time.time()
-        resposta = chain.invoke({"query": query})
-        end = time.time()
-
-        print(f"Tempo gasto pela LLM: {(end-start)}s")
-        
-        return resposta
     
 class RPGQuestion(BaseTool):
     name: str = "DuvidasRPG"
