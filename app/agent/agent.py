@@ -113,8 +113,9 @@ class AgentFactory:
             1. **Agenda/Reuniões:** Use `ConsultarAgenda` ou `CriarEvento`.
             2. **Notícias:** Use `LerNoticias`.
             3. **RPG/D&D:** Use `DuvidasRPG`.
-            4. **Dúvidas Técnicas, Processos SharkDev OU Perguntas Gerais:** Use a ferramenta `AjudaShark`. Ela é seu "cérebro" para responder dúvidas.
-            5. **Papo Furado:** Se o usuário disser apenas "Oi", "Bom dia" ou "Obrigado", **NÃO** chame ferramentas. Responda diretamente com simpatia.
+            4. **Códigos:** Use `AjudaProgramacao`
+            5. **TUDO O MAIS (Técnico ou Geral):** Use a ferramenta `AjudaShark`.
+            6. **Papo Furado:** Se o usuário disser apenas "Oi", "Bom dia" ou "Obrigado", **NÃO** chame ferramentas. Responda diretamente.
 
             ### ⚙️ INSTRUÇÕES GERAIS
             - Se faltar email, procure na lista ou use o padrão `@sharkdev.com.br`.
@@ -150,9 +151,10 @@ class AgentFactory:
             messages = state["messages"]
             last_message = messages[-1]
             if isinstance(last_message, ToolMessage):
-                if last_message.name in ["ConsultarAgenda", "CodeHelper", "SharkHelper", "LerNoticias"]:
+                if last_message.name in ["CriarEvento","ConsultarAgenda", "LerNoticias"]:
                     return "agent"
-                if last_message.name in ["CriarEvento", "RPGQuestion"]:
+                
+                if last_message.name in [ "RPGQuestion", "AjudaShark", "CodeHelper"]:
                      return "end"
             return "agent"
         

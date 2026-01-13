@@ -29,7 +29,7 @@ class SharkHelper(BaseTool):
             collection = get_collection("shark_helper")
             # Se a pergunta for muito genérica, a busca pode não retornar nada relevante, e tudo bem.
             if temas:
-                data = collection.query(query_texts=temas, n_results=3)
+                data = collection.query(query_texts=temas, n_results=5)
                 documents = data["documents"]
             else:
                 documents = []

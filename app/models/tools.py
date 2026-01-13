@@ -19,7 +19,7 @@ class CodeHelperInput(BaseModel):
 
 class SharkHelperInput(BaseModel):
     pergunta: str = Field(description="Pergunta informada pelo usuário.")
-    temas: List[str] = Field(description="Lista dos principais temas. Limite Máximo: 5")
+    temas: List[str] = Field(defaul=[], description="Lista dos principais temas. Limite Máximo: 5")
 
 class DateParts(BaseModel):
     day: int = Field(description="Dia do mês (1-31)")
