@@ -16,15 +16,14 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 # Configuração de Logger
 logging.basicConfig(level=logging.INFO)
-# Silencia logs verbosos do Google
 logging.getLogger('google_auth_oauthlib').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
-# --- CLASSE DE AUTENTICAÇÃO EM MEMÓRIA (Substitui streamlit_google_auth) ---
+# --- CLASSE DE AUTENTICAÇÃO EM MEMÓRIA ---
 class MemoryGoogleAuth:
     """
     Gerencia autenticação OAuth2 usando dicionários em memória, 
-    ELIMINANDO a necessidade do arquivo 'client_secret.json'.
+    eliminando a necessidade de arquivos locais.
     """
     def __init__(self, client_config, redirect_uri):
         self.client_config = client_config
@@ -36,7 +35,6 @@ class MemoryGoogleAuth:
         ]
         
     def get_flow(self):
-        """Cria o fluxo OAuth a partir do dicionário de configuração na memória."""
         return Flow.from_client_config(
             self.client_config,
             scopes=self.SCOPES,
@@ -49,23 +47,25 @@ class MemoryGoogleAuth:
             flow = self.get_flow()
             auth_url, _ = flow.authorization_url(prompt='consent')
             
-            # Exibe um botão estilizado
             st.markdown(
-                f'<a href="{auth_url}" target="_self" style="background-color:#F551B1; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold; display:block; text-align:center;">Login</a>', 
+                f'<a href="{auth_url}" target="_self" style="background-color:#F551B1; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold; display:block; text-align:center;">Conectar Google Calendar</a>', 
                 unsafe_allow_html=True
             )
         except Exception as e:
             st.error(f"Erro ao gerar link de login: {e}")
 
     def check_authentication(self):
-        """Verifica o retorno do Google (código na URL) e troca pelo token."""
-        # Compatibilidade com versões recentes do Streamlit
-        try:
-            query_params = st.query_params
-        except AttributeError:
-            query_params = st.experimental_get_query_params()
-            
-        code = query_params.get("code")
+        """Verifica o retorno do Google e troca pelo token, tratando erros de código usado."""
+        
+        # 1. Se já estamos logados na sessão, ignoramos o código da URL para evitar erro
+        if st.session_state.get('connected'):
+            # Se ainda tem lixo na URL, limpa silenciosamente
+            if "code" in st.query_params:
+                st.query_params.clear()
+            return
+
+        # 2. Se não estamos logados, tenta processar o código
+        code = st.query_params.get("code")
 
         if code:
             try:
@@ -84,17 +84,18 @@ class MemoryGoogleAuth:
                 }
                 st.session_state['connected'] = True
                 
-                # Limpa a URL para evitar reprocessamento
-                if hasattr(st, 'query_params'):
-                    st.query_params.clear()
-                else:
-                    st.experimental_set_query_params()
-                    
+                # SUCESSO: Limpa a URL imediatamente e recarrega
+                st.query_params.clear()
                 st.rerun()
                 
             except Exception as e:
-                st.error(f"Erro na autenticação: {e}")
+                # Se o código for inválido (invalid_grant), não quebra a tela.
+                # Apenas avisa o usuário e limpa a URL para ele tentar de novo.
+                logger.error(f"Erro no fluxo de auth: {e}")
+                st.warning("⚠️ A sessão expirou ou o login foi interrompido. Por favor, clique em 'Conectar' novamente.")
+                st.query_params.clear()
                 st.session_state['connected'] = False
+                # Não damos rerun() aqui para evitar loop infinito, deixamos o botão aparecer.
 
     def logout(self):
         """Limpa a sessão."""
@@ -113,18 +114,13 @@ class MemoryGoogleAuth:
 
 
 def setup_authentication():
-    """
-    Configura a autenticação usando Settings (Env Vars) e a classe em memória.
-    """
-    # 1. Busca o JSON de configuração das Settings (Environment ou Secrets)
+    """Configura a autenticação usando Settings (Env Vars) e a classe em memória."""
     client_secret_data = Settings.google.get('client_secret')
     
     if not client_secret_data:
-        # Se não achar a variável, mostra erro de CONFIGURAÇÃO, não de ARQUIVO.
-        st.error("❌ Erro de Configuração: Variável 'GOOGLE_CLIENT_SECRET' ou 'client_secret' não encontrada nos Secrets/.env")
+        st.error("❌ Erro de Configuração: Variável 'client_secret' não encontrada.")
         st.stop()
         
-    # Se for string (JSON), converte para dict
     if isinstance(client_secret_data, str):
         try:
             client_config = json.loads(client_secret_data)
@@ -134,22 +130,21 @@ def setup_authentication():
     else:
         client_config = client_secret_data
 
-    # 2. Inicializa o Autenticador em Memória
+    # Inicializa o Autenticador
     auth = MemoryGoogleAuth(
         client_config=client_config,
         redirect_uri="https://cidinha-shark.streamlit.app" 
     )
     
-    # 3. Verifica callback do login
+    # Verifica callback do login
     auth.check_authentication()
     
-    # 4. Recupera credenciais para validar usuário
+    # Recupera credenciais para validar usuário
     creds = auth.credentials
     
     if creds and creds.valid:
         st.session_state['connected'] = True
         
-        # Busca dados do usuário se ainda não tiver
         if 'user_info' not in st.session_state:
             try:
                 headers = {"Authorization": f"Bearer {creds.token}"}
@@ -170,7 +165,6 @@ def main():
     apply_custom_styles()
     init_session_state()
 
-    # Inicializa autenticação (Sem arquivos!)
     auth = setup_authentication()
     
     with st.sidebar:
@@ -182,7 +176,6 @@ def main():
         st.markdown("### Acesso")
         
         if not st.session_state.get('connected', False):
-            # Chama o login da nossa classe customizada
             auth.login() 
             st.warning("Faça login para usar a Agenda.")
         else:
@@ -211,7 +204,7 @@ def main():
         )
 
     user_text = st.chat_input(
-        "Como posso ajudar?", 
+        "Como posso ajudar a SharkDev hoje?", 
         disabled=st.session_state.processing,
         on_submit=lock_input,
         key="user_input_widget"
@@ -249,13 +242,11 @@ def main():
 
             with st.spinner("A Pamela não vai gostar nada disso..."):
                 try:
-                    # 1. Recupera as credenciais diretamente da classe auth
                     user_creds = auth.credentials
 
                     if st.session_state.get('connected') and not user_creds:
                         logger.warning("UI diz conectado, mas credenciais estão vazias.")
 
-                    # 2. Passa para o agente
                     response = st.session_state.factory.invoke(
                         input_text=user_text or "Processar anexos", 
                         session_messages=st.session_state['messages'],
