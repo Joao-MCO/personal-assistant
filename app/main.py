@@ -32,27 +32,28 @@ class MemoryGoogleAuth:
         ]
         
     def get_flow(self):
-        flow = Flow.from_client_config(
+        return Flow.from_client_config(
             self.client_config,
             scopes=self.SCOPES,
             redirect_uri=self.redirect_uri,
         )
 
-        # DESATIVA PKCE (OBRIGATÓRIO NO STREAMLIT)
-        flow._oauth2session._client.code_challenge_method = None
-
-        return flow
 
 
     def login(self):
         flow = self.get_flow()
+
         auth_url, state = flow.authorization_url(
             access_type="offline",
             prompt="consent",
         )
 
+        # SALVAR O NECESSÁRIO DO PKCE
         st.session_state["oauth_state"] = state
+        st.session_state["oauth_code_verifier"] = flow.code_verifier
+
         st.link_button("Conectar Google Calendar", auth_url)
+
 
     def check_authentication(self):
         code = st.query_params.get("code")
@@ -72,8 +73,11 @@ class MemoryGoogleAuth:
 
         try:
             flow = self.get_flow()
-            flow.fetch_token(code=code)
 
+            # RESTAURA O PKCE
+            flow.code_verifier = st.session_state.get("oauth_code_verifier")
+
+            flow.fetch_token(code=code)
             creds = flow.credentials
 
             st.session_state["google_creds"] = {
@@ -87,11 +91,17 @@ class MemoryGoogleAuth:
 
             st.session_state["connected"] = True
             st.query_params.clear()
+
+            # LIMPA ESTADO TEMPORÁRIO
+            st.session_state.pop("oauth_state", None)
+            st.session_state.pop("oauth_code_verifier", None)
+
             st.rerun()
 
         except Exception:
             logger.exception("Erro OAuth")
             st.warning("Falha na autenticação")
+
 
 
 
