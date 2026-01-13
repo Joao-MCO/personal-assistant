@@ -33,7 +33,7 @@ class CreateEvent(BaseTool):
 
     def _run(self, meeting_date: Dict[str, Any], description: str, attendees: List[str] = None, meet_length: int = 30, timezone: str = "America/Sao_Paulo"):
         # Importação Tardia (Lazy Import) para evitar erro circular
-        from app.services.google_services import get_service
+        from services.google_services import get_service
 
         if not self._user_credentials:
             return MSG_LOGIN
@@ -91,7 +91,7 @@ class CheckCalendar(BaseTool):
 
     def _run(self, email: str, start_date: Any, end_date: Any):
         # Importação Tardia (Lazy Import) para evitar erro circular
-        from app.services.google_services import get_service
+        from services.google_services import get_service
 
         if not self._user_credentials:
             return MSG_LOGIN
