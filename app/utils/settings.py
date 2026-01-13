@@ -4,128 +4,117 @@ import os
 import streamlit as st
 from dotenv import load_dotenv
 
-# Carrega o .env se estiver rodando localmente
 load_dotenv()
 
-logger = logging.getLogger(__name__)
-
 def get_secret(key, default=None):
-    """
-    Tenta buscar a chave primeiro no Streamlit Secrets.
-    Se falhar (ou não estiver no Streamlit), busca nas variáveis de ambiente (OS).
-    """
-    # 1. Tenta pegar do st.secrets (Nuvem)
+    """Busca o segredo de forma robusta e Case-Insensitive"""
+    # 1. Tenta busca direta
     try:
         if key in st.secrets:
             return st.secrets[key]
-    except (FileNotFoundError, AttributeError):
+    except:
         pass
-    
-    # 2. Tenta pegar do ambiente local (.env / Docker)
+
+    # 2. Tenta busca varrendo as chaves (para evitar problemas de maiúsculas/minúsculas)
+    try:
+        key_lower = key.lower()
+        for k, v in st.secrets.items():
+            if k.lower() == key_lower:
+                return v
+    except:
+        pass
+        
+    # 3. Tenta do ambiente
     return os.getenv(key, default)
 
-def get_json_secret(key, default=None):
+class AppSettings:
     """
-    Carrega segredos JSON de forma robusta, aceitando String ou Dict.
+    Classe dinâmica que busca as configurações sempre que são acessadas.
+    Isso evita problemas de cache onde a chave aparece como None porque
+    foi lida antes de estar disponível.
     """
-    data = get_secret(key)
     
-    # 1. Se não encontrou nada
-    if data is None:
-        return default
+    @property
+    def gemini(self):
+        return {
+            "api_key": get_secret("GEMINI_API_KEY") or get_secret("GOOGLE_API_KEY"),
+            "model": get_secret("GEMINI_MODEL", "gemini-1.5-flash"), 
+            "embedding": get_secret("GEMINI_EMBEDDING_MODEL")
+        }
 
-    # 2. Se já for um dicionário (O Streamlit parseou o TOML automaticamente)
-    if isinstance(data, dict):
-        return data
+    @property
+    def maritaca(self):
+        return {
+            "api_key": get_secret("MARITACA_API_KEY"),
+            "model": get_secret("MARITACA_MODEL")
+        }
 
-    # 3. Se for string, tenta fazer o parse do JSON
-    if isinstance(data, str):
-        try:
-            return json.loads(data)
-        except json.JSONDecodeError:
-            print(f"Erro: A chave {key} tem uma string que não é um JSON válido.")
-            return default
-            
-    return default
+    @property
+    def claude(self):
+        return {
+            "api_key": get_secret("CLAUDE_API_KEY"),
+            "model": get_secret("CLAUDE_MODEL")
+        }
 
-# --- NOVA FUNÇÃO PARA LER CREDENCIAIS ---
-def get_google_credentials():
-    """
-    Busca credenciais OAuth no .env ou no arquivo credentials.json local.
-    """
-    # 1. Tenta pegar da variável de ambiente (Deploy/Cloud)
-    json_str = get_secret("GOOGLE_API_JSON")
-    if json_str:
-        try:
-            return json.loads(json_str)
-        except Exception as e:
-            print(f"Erro ao ler GOOGLE_API_JSON do env: {e}")
-    
-    # 2. Se não achou ou falhou, tenta ler o arquivo local (Desenvolvimento)
-    if os.path.exists("credentials.json"):
-        try:
-            with open("credentials.json", "r") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Erro ao ler credentials.json: {e}")
-            
-    return {} # Retorna vazio se falhar tudo
+    @property
+    def openai(self):
+        return {
+            "api_key": get_secret("OPENAI_API_KEY"),
+            "model": get_secret("OPENAI_MODEL")
+        }
 
-class Settings:
-    
-    # Tenta pegar GEMINI_API_KEY, se falhar tenta GOOGLE_API_KEY
-    _gemini_key = get_secret("GEMINI_API_KEY") or get_secret("GOOGLE_API_KEY")
+    @property
+    def chroma(self):
+        return {
+            "api_key": get_secret("CHROMA_API_KEY"),
+            "tenant": get_secret("CHROMA_TENANT"),
+            "database": get_secret("CHROMA_DATABASE"),
+            "host": get_secret("CHROMA_HOST")
+        }
 
-    gemini = {
-        "api_key": _gemini_key,
-        "model": get_secret("GEMINI_MODEL", "gemini-1.5-flash"), 
-        "embedding": get_secret("GEMINI_EMBEDDING_MODEL")
-    }
+    @property
+    def google(self):
+        # Tenta recuperar o JSON de credenciais de várias formas
+        secret_json = get_secret("GOOGLE_CLIENT_SECRET") or get_secret("client_secret") or "client_secret.json"
+        return {
+            "client_secret": secret_json,
+            "calendar_id": "primary",
+            "scopes": ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/userinfo.email"]
+        }
 
-    maritaca = {
-        "api_key": get_secret("MARITACA_API_KEY"),
-        "model": get_secret("MARITACA_MODEL")
-    }
+    @property
+    def auth(self):
+        return {
+            "secret": get_secret("AUTH_COOKIE_SECRET", "chave_secreta_padrao_segura"),
+            "cookie_name": "google_auth_cookie",
+            "expiry_days": 7
+        }
 
-    claude = {
-        "api_key": get_secret("CLAUDE_API_KEY"),
-        "model": get_secret("CLAUDE_MODEL")
-    }
+    @property
+    def working_days(self):
+        return {
+            "Monday": {"start": "8:00", "end": "18:00"},
+            "Tuesday": {"start": "8:00", "end": "18:00"},
+            "Wednesday": {"start": "8:00", "end": "18:00"},
+            "Thursday": {"start": "8:00", "end": "18:00"},
+            "Friday": {"start": "8:00", "end": "17:00"}
+        }
 
-    openai = {
-        "api_key": get_secret("OPENAI_API_KEY"),
-        "model": get_secret("OPENAI_MODEL")
-    }
+    @property
+    def gnews_api_key(self):
+        return get_secret("GNEWS_API_KEY")
 
-    chroma = {
-        "api_key": get_secret("CHROMA_API_KEY"),
-        "tenant": get_secret("CHROMA_TENANT"),
-        "database": get_secret("CHROMA_DATABASE"),
-        "host": get_secret("CHROMA_HOST")
-    }
+    @property
+    def max_tokens(self):
+        return get_secret("MAX_TOKENS")
 
-    google = {
-        "client_secret": get_secret("GOOGLE_CLIENT_SECRET", "client_secret.json"),
-        "calendar_id": "primary", # Sempre 'primary' pois é o usuário logado
-        "scopes": ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/userinfo.email"]
-    }
+    @property
+    def temperature(self):
+        return get_secret("TEMPERATURE")
 
-    # Configurações do Cookie de Autenticação
-    auth = {
-        "secret": get_secret("AUTH_COOKIE_SECRET", "uma_chave_secreta_aleatoria_muito_longa"),
-        "cookie_name": "google_auth_cookie",
-        "expiry_days": 7
-    }
+    @property
+    def orchestrator(self):
+        return get_secret("ORCHESTRATOR_MODEL")
 
-    working_days = {
-        "Monday": {"start": "8:00", "end": "18:00"},
-        "Tuesday": {"start": "8:00", "end": "18:00"},
-        "Wednesday": {"start": "8:00", "end": "18:00"},
-        "Thursday": {"start": "8:00", "end": "18:00"},
-        "Friday": {"start": "8:00", "end": "17:00"}
-    }
-
-    gnews_api_key = get_secret("GNEWS_API_KEY")
-    max_tokens = get_secret("MAX_TOKENS")
-    temperature = get_secret("TEMPERATURE")
-    orchestrator = get_secret("ORCHESTRATOR_MODEL")
+# Instância global que substitui a classe estática antiga
+Settings = AppSettings()
