@@ -1,5 +1,5 @@
 from tools.google_tools import CreateEvent, CheckCalendar
-from tools.general import GenericQuestion, RPGQuestion
+from tools.general import RPGQuestion
 from tools.news import ReadNews
 from tools.codes import CodeHelper
 from tools.shark import SharkHelper
