@@ -41,16 +41,7 @@ class MemoryGoogleAuth:
 
 
     def login(self):
-        # Se já voltou do Google, NÃO iniciar OAuth
-        if "code" in st.query_params:
-            return
-
-        # Se OAuth já foi iniciado, não reiniciar
-        if "oauth_state" in st.session_state:
-            st.link_button(
-                "Conectar Google Calendar",
-                st.session_state["oauth_auth_url"]
-            )
+        if "oauth_flow" in st.session_state:
             return
 
         flow = self.get_flow()
@@ -60,20 +51,16 @@ class MemoryGoogleAuth:
             prompt="consent",
         )
 
+        st.session_state["oauth_flow"] = flow
         st.session_state["oauth_state"] = state
-        st.session_state["oauth_code_verifier"] = flow.code_verifier
-        st.session_state["oauth_auth_url"] = auth_url
 
         st.link_button("Conectar Google Calendar", auth_url)
-
-
-
 
     def check_authentication(self):
         code = st.query_params.get("code")
         state = st.query_params.get("state")
 
-        if not code or not state:
+        if not code:
             return
 
         if isinstance(code, list):
@@ -81,15 +68,19 @@ class MemoryGoogleAuth:
         if isinstance(state, list):
             state = state[0]
 
-        if state != st.session_state.get("oauth_state"):
+        saved_state = st.session_state.get("oauth_state")
+
+        if state != saved_state:
             logger.error("State recebido != state salvo")
-            st.warning("Estado OAuth inválido")
+            return
+
+        flow = st.session_state.get("oauth_flow")
+
+        if not flow:
+            logger.error("Flow não encontrado na sessão")
             return
 
         try:
-            flow = self.get_flow()
-            flow.code_verifier = st.session_state["oauth_code_verifier"]
-
             flow.fetch_token(code=code)
             creds = flow.credentials
 
@@ -104,17 +95,17 @@ class MemoryGoogleAuth:
 
             st.session_state["connected"] = True
 
-            # 🔥 LIMPEZA SOMENTE APÓS SUCESSO
+            # LIMPEZA FINAL
+            st.session_state.pop("oauth_flow", None)
             st.session_state.pop("oauth_state", None)
-            st.session_state.pop("oauth_code_verifier", None)
-            st.session_state.pop("oauth_auth_url", None)
-
             st.query_params.clear()
+
             st.rerun()
 
         except Exception:
             logger.exception("Erro OAuth")
             st.warning("Falha na autenticação")
+
 
     def logout(self):
         """Limpa a sessão."""
