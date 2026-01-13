@@ -2,11 +2,17 @@
 
 **Cidinha** é a assistente virtual inteligente da **SharkDev**, projetada para auxiliar na produtividade, programação e entretenimento da equipa. Ela utiliza uma arquitetura de agentes baseada em grafos (**LangGraph**) para orquestrar diferentes modelos de IA e ferramentas externas.
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)
-![Streamlit](https://img.shields.io/badge/Frontend-Streamlit-FF4B4B?style=for-the-badge&logo=streamlit)
-![LangChain](https://img.shields.io/badge/Orchestrator-LangGraph-1C3C3C?style=for-the-badge&logo=langchain)
-![Gemini](https://img.shields.io/badge/Brain-Gemini%201.5-4285F4?style=for-the-badge&logo=google-gemini)
-![OpenAI](https://img.shields.io/badge/Built%20with-OpenAI%20GPT--4o-purple?style=flat-square&logo=openai&logoColor=white)
+<div align="center">
+
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
+
+![Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google%20gemini&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI%20GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white)
+![Claude](https://img.shields.io/badge/Anthropic%20Claude-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
+
+</div>
 
 ---
 
