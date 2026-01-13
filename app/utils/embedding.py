@@ -1,12 +1,12 @@
 from pypdf import PdfReader
-from chroma import get_collection
+from services.chroma import get_collection
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import os
 import uuid
 import math
 
-def create_embedding():
-    collection = get_collection("rpg_collection")
+def create_embedding(collection:str):
+    collection = get_collection(collection)
     embedding_func = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 
     files = os.listdir("dados")
