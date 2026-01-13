@@ -1,113 +1,131 @@
-# 🦈 Cidinha - Secretária Virtual da SharkDev
+# 🦈 Cidinha - Assistente Virtual SharkDev
 
-Bem-vindo ao repositório da **Cidinha**, a assistente virtual inteligente da **SharkDev**. Desenvolvida com as tecnologias mais modernas de IA Generativa, a Cidinha não é apenas um chatbot, mas um agente capaz de processar documentos, analisar imagens, codificar e até tirar dúvidas sobre RPG!
+**Cidinha** é a assistente virtual inteligente da **SharkDev**, projetada para auxiliar na produtividade, programação e entretenimento da equipa. Ela utiliza uma arquitetura de agentes baseada em grafos (**LangGraph**) para orquestrar diferentes modelos de IA e ferramentas externas.
 
+<div align="center">
+
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
-![LangChain](https://img.shields.io/badge/LangChain-121011?style=for-the-badge&logo=chainlink&logoColor=white)
-![Google Gemini](https://img.shields.io/badge/Google%20Gemini-4285F4?style=for-the-badge&logo=google-gemini&logoColor=white)
-![Anthropic Claude](https://img.shields.io/badge/Claude%203-750139?style=for-the-badge&logo=anthropic&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
+
+![Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google%20gemini&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white)
+![Claude](https://img.shields.io/badge/Anthropic%20Claude-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
+
+</div>
 
 ---
 
 ## 🚀 Funcionalidades
 
-A Cidinha utiliza uma arquitetura de **Agente (LangGraph)** que decide qual ferramenta usar com base na sua necessidade:
+A Cidinha atua como uma agente autónoma que seleciona a ferramenta correta para cada solicitação:
 
-*   **💻 Ajuda em Programação:** Especialista em Python e arquitetura, utilizando o modelo **Claude 3** para fornecer códigos limpos e debugging.
-*   **📰 Resumo de Notícias:** Busca as últimas notícias via GNews API e utiliza a **Maritaca AI** para criar mini-artigos consolidados.
-*   **🎲 Mestre de RPG:** Um especialista em D&D 5e que utiliza RAG (Busca em documentos) para tirar dúvidas de regras e mecânicas.
-*   **🦈 Shark Helper:** Onboarding e suporte para desenvolvedores da SharkDev, focado em Blip e fluxos conversacionais.
-*   **👁️ Visão Multimodal:** Capaz de ler e analisar arquivos anexados (Imagens, PDFs, TXT, JSON, CSV).
-*   **🧠 Assuntos Gerais:** Conhecimento enciclopédico via Google Gemini.
+### 🏢 Produtividade (Google Workspace)
+* **📅 Agenda:** Consulta compromissos e cria novos eventos no Google Calendar.
+* **📧 E-mail:** Lê a caixa de entrada, filtra mensagens por data/assunto e envia e-mails.
+* **👥 Contactos:** Reconhece automaticamente os e-mails da equipa SharkDev para facilitar o envio.
+
+### 💻 Desenvolvimento
+* **🤖 Pair Programmer:** Utiliza o modelo **Claude 4** para gerar código, refatorar scripts e explicar conceitos de programação.
+* **🦈 Shark Helper:** Um mentor especializado para dúvidas internas sobre a SharkDev, Blip e bots, utilizando RAG (Retrieval-Augmented Generation).
+
+### 📰 Informação & Lazer
+* **🗞️ Notícias:** Busca as últimas notícias via API GNews e utiliza a **Maritaca AI** para gerar resumos em português.
+* **🐉 Mestre de RPG:** Responde a dúvidas sobre regras de D&D 5e consultando uma base de conhecimento vetorial.
+
+### 👁️ Multimodalidade
+* Suporte para upload e análise de ficheiros (imagens e texto) diretamente no chat.
 
 ---
 
 ## 🛠️ Stack Tecnológica
 
-*   **Interface:** [Streamlit](https://streamlit.io/) com CSS personalizado (Dark Mode & Pink accents).
-*   **Orquestração de IA:** [LangChain](https://www.langchain.com/) & [LangGraph](https://blog.langchain.dev/langgraph/).
-*   **Modelos de Linguagem (LLMs):**
-    *   Google Gemini 1.5 Flash/Pro (Cérebro principal e Visão).
-    *   Anthropic Claude 3 (Codificação).
-    *   Maritalk (Processamento de linguagem natural em PT-BR).
-*   **Banco de Dados Vetorial:** [ChromaDB](https://www.trychroma.com/) para busca semântica (RAG).
-*   **Embeddings:** Google Generative AI Embeddings.
+O projeto integra diversos LLMs para aproveitar o melhor de cada um:
 
----
-
-## 📋 Pré-requisitos
-
-Antes de começar, você precisará de chaves de API para os seguintes serviços:
-*   Google AI Studio (Gemini)
-*   Anthropic (Claude)
-*   Maritaca AI
-*   GNews API
-*   ChromaDB (Cloud ou Local)
+* **Orquestração:** [LangGraph](https://langchain-ai.github.io/langgraph/) (StateGraph).
+* **LLM Principais (Agente):** Google Gemini 3 Flash e GPT 5 Nano.
+* **LLM Coding:** Anthropic Claude 4 Haiku.
+* **LLM PT-BR:** Maritaca AI (Sabiazinho-4).
+* **Vector DB:** ChromaDB com Google Generative AI Embeddings.
+* **Interface:** Streamlit com CSS personalizado.
 
 ---
 
 ## ⚙️ Configuração
 
-1.  **Clone o repositório:**
-    ```bash
-    git clone https://github.com/seu-usuario/cidinha-sharkdev.git
-    cd cidinha-sharkdev
-    ```
-
-2.  **Instale as dependências:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Variáveis de Ambiente:**
-    Crie um arquivo `.env` na raiz do projeto (ou configure no Streamlit Secrets):
-    ```env
-    GEMINI_API_KEY=sua_chave_aqui
-    GEMINI_MODEL=gemini-1.5-flash
-    GEMINI_EMBEDDING_MODEL=models/embedding-001
-
-    MARITACA_API_KEY=sua_chave_aqui
-    MARITACA_MODEL=sabia-2-medium
-
-    CLAUDE_API_KEY=sua_chave_aqui
-    CLAUDE_MODEL=claude-3-5-sonnet-20240620
-
-    GNEWS_API_KEY=sua_chave_aqui
-
-    CHROMA_API_KEY=sua_chave_aqui
-    CHROMA_TENANT=seu_tenant
-    CHROMA_DATABASE=seu_db
-    ```
-
----
-
-## 🏃‍♂️ Como Executar
-
-Para iniciar a Cidinha, basta rodar o comando:
+### 1. Instalação
+Clone o repositório e instale as dependências:
 
 ```bash
-streamlit run main.py
+git clone [https://github.com/seu-usuario/cidinha-sharkdev.git](https://github.com/seu-usuario/cidinha-sharkdev.git)
+cd cidinha-sharkdev
+pip install -r requirements.txt
 ```
 
----
+### 2. Variáveis de Ambiente
+Crie um ficheiro .env na raiz ou configure os secrets do Streamlit com as seguintes chaves:
+
+```Ini, TOML
+ORCHESTRATOR_MODEL="gpt" | "gemini" | "claude" | "maritaca"
+
+# Modelos de IA
+GEMINI_API_KEY="sua_chave"
+GEMINI_MODEL="gemini-3-flash-preview"
+GEMINI_EMBEDDING_MODEL="models/embedding-001"
+
+CLAUDE_API_KEY="sua_chave"
+CLAUDE_MODEL="claude-haiku-4-5-20251001"
+
+MARITACA_API_KEY="sua_chave"
+MARITACA_MODEL="sabiazinho-4"
+
+OPENAI_MODEL="gpt-5-nano"
+OPENAI_API_KEY="sua_chave"
+
+# Ferramentas Externas
+GNEWS_API_KEY="sua_chave"
+
+# Banco de Dados Vetorial (RAG)
+CHROMA_API_KEY="sua_chave"
+CHROMA_TENANT="default_tenant"
+CHROMA_DATABASE="default_database"
+CHROMA_HOST="seu_host_chroma"
+
+# Autenticação Google
+GOOGLE_CLIENT_ID="seu_client_id"
+GOOGLE_CLIENT_SECRET='{"web":{...}}' # JSON string ou caminho para ficheiro
+AUTH_REDIRECT_URI="http://localhost:8501"
+AUTH_COOKIE_SECRET="string_aleatoria"
+
+# Configurações
+MAX_TOKENS="4000"
+TEMPERATURE="0.4"
+```
+
+### 3. Execução
+Inicie a aplicação Streamlit:
+
+```Bash
+streamlit run app/main.py
+```
 
 ## 📂 Estrutura do Projeto
+```Plaintext
 
-```text
-.
-├── main.py           # Ponto de entrada da aplicação Streamlit
-├── agent.py          # Orquestração do Agente e lógica do Grafo
-├── tools.py          # Definição e schemas das ferramentas de IA
-├── settings.py       # Gerenciamento de chaves de API e configurações
-├── chroma.py         # Integração com o banco de dados vetorial
-├── embedding.py      # Lógica de processamento e vetorização
-├── encode_image.py   # Helper para processamento de imagens
-├── render.py         # Componentes visuais e interface
-├── state.py          # Gerenciamento de estado da sessão
-├── styles.py         # Definições de CSS (SharkDev Theme)
-│
-├── codes.py          # Lógica: Ajuda em Programação
-├── general.py        # Lógica: Assuntos Gerais
-├── news.py           # Lógica: Notícias (GNews + Maritaca)
-├── shark.py          # Lógica: Suporte SharkDev / Blip
-└── manager.py        # Gerenciador de roteamento de ferramentas
+personal-assistant/
+├── app/
+│   ├── agent/          # Lógica do Agente e Grafo
+│   ├── assets/         # Imagens e dados estáticos
+│   ├── interface/      # UI, Renderização e Estado
+│   ├── models/         # Definições Pydantic (Inputs das Tools)
+│   ├── services/       # Clientes de API (Google, Chroma)
+│   ├── tools/          # Ferramentas (News, Code, RPG, Shark, Google)
+│   ├── utils/          # Configurações e Embeddings
+│   └── main.py         # Ponto de entrada
+├── .devcontainer/      # Configuração Docker/Codespaces
+├── requirements.txt    # Dependências
+└── README.md
+```
+
+## 📄 Licença
+Este projeto está licenciado sob a GNU GPLv3. Consulte o ficheiro LICENSE para mais detalhes.
