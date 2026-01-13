@@ -5,10 +5,19 @@ from typing import Any, Dict, List, Type
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, PrivateAttr 
 from langchain_core.tools import BaseTool
-from services.google import get_service
+# REMOVIDO DAQUI: from services.google import get_service (Causava o erro de ciclo)
 from models.tools import CheckCalendarInput, CreateEventInput
 
 logger = logging.getLogger(__name__)
+
+# Mensagem padrão para quando o usuário não estiver logado
+MSG_LOGIN = (
+    "Pra te mostrar sua agenda eu preciso que você esteja logado no Google Calendar.\n"
+    "Por favor, faça o seguinte:\n"
+    "1. Vá até a barra lateral do painel onde você está usando a Cidinha.\n"
+    "2. Clique para conectar / fazer login no Google Calendar com a sua conta.\n"
+    "Depois de logar, me manda de novo: 'Minha agenda' ou o período que você quer."
+)
 
 # --- Ferramenta 1: Criar Evento ---
 class CreateEvent(BaseTool):
@@ -23,17 +32,18 @@ class CreateEvent(BaseTool):
         self._user_credentials = creds
 
     def _run(self, meeting_date: Dict[str, Any], description: str, attendees: List[str] = None, meet_length: int = 30, timezone: str = "America/Sao_Paulo"):
-        # FIX: Checagem antecipada. Se não tem credencial, nem chama o serviço.
+        # Importação Tardia (Lazy Import) para evitar erro circular
+        from services.google import get_service
+
         if not self._user_credentials:
-            return "Erro de Permissão: O usuário não está logado no Google Calendar. Peça para ele fazer login na barra lateral."
+            return MSG_LOGIN
 
         service = get_service(self._user_credentials)
         
         if not service:
-            return "Erro técnico: Falha ao autenticar no serviço do Google."
+            return "Erro técnico: Falha ao autenticar no serviço do Google, mesmo com credenciais presentes."
 
         try:
-            # Tratamento de Data (Dict ou Objeto)
             if isinstance(meeting_date, dict):
                 d = meeting_date
                 try:
@@ -80,9 +90,11 @@ class CheckCalendar(BaseTool):
         self._user_credentials = creds
 
     def _run(self, email: str, start_date: Any, end_date: Any):
-        # FIX: Checagem antecipada.
+        # Importação Tardia (Lazy Import) para evitar erro circular
+        from services.google import get_service
+
         if not self._user_credentials:
-            return "Erro de Permissão: O usuário não está logado no Google Calendar. Peça para ele fazer login na barra lateral."
+            return MSG_LOGIN
 
         service = get_service(self._user_credentials)
         

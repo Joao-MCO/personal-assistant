@@ -51,7 +51,7 @@ class MemoryGoogleAuth:
             
             # Exibe um botão estilizado
             st.markdown(
-                f'<a href="{auth_url}" target="_self" style="background-color:#F551B1; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold; display:block; text-align:center;">Conectar Google Calendar</a>', 
+                f'<a href="{auth_url}" target="_self" style="background-color:#F551B1; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold; display:block; text-align:center;">Login</a>', 
                 unsafe_allow_html=True
             )
         except Exception as e:
@@ -211,7 +211,7 @@ def main():
         )
 
     user_text = st.chat_input(
-        "Como posso ajudar a SharkDev hoje?", 
+        "Como posso ajudar?", 
         disabled=st.session_state.processing,
         on_submit=lock_input,
         key="user_input_widget"
