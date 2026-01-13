@@ -12,7 +12,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from tools.google_tools import CheckCalendar, CreateEvent
+from tools.google_tools import CheckCalendar, CheckEmail, CreateEvent
 from utils.settings import Settings
 from tools.manager import agent_tools
 
@@ -27,7 +27,13 @@ class AgentFactory:
         # 2. INSTANCIAR novas ferramentas exclusivas
         self.create_event_tool = CreateEvent()
         self.check_calendar_tool = CheckCalendar()
-        self.session_tools = global_tools + [self.create_event_tool, self.check_calendar_tool]
+        self.check_email_tool = CheckEmail()
+        self.session_tools = global_tools + [
+            self.create_event_tool,
+            self.check_calendar_tool,
+            self.check_email_tool,
+]
+
         
         # Fallback de segurança para llm
         if not llm: llm = "gemini"
@@ -111,11 +117,12 @@ class AgentFactory:
             
             ### 🛠️ REGRAS DE SELEÇÃO DE FERRAMENTAS
             1. **Agenda/Reuniões:** Use `ConsultarAgenda` ou `CriarEvento`.
-            2. **Notícias:** Use `LerNoticias`.
-            3. **RPG/D&D:** Use `DuvidasRPG`.
-            4. **Códigos:** Use `AjudaProgramacao`
-            5. **TUDO O MAIS (Técnico ou Geral):** Use a ferramenta `AjudaShark`.
-            6. **Papo Furado:** Se o usuário disser apenas "Oi", "Bom dia" ou "Obrigado", **NÃO** chame ferramentas. Responda diretamente.
+            2. **Emails/Ticket Blip:** Use `ConsultarEmail`.
+            3. **Notícias:** Use `LerNoticias`.
+            4. **RPG/D&D:** Use `DuvidasRPG`.
+            5. **Códigos:** Use `AjudaProgramacao`
+            6. **TUDO O MAIS (Técnico ou Geral):** Use a ferramenta `AjudaShark`.
+            7. **Papo Furado:** Se o usuário disser apenas "Oi", "Bom dia" ou "Obrigado", **NÃO** chame ferramentas. Responda diretamente.
 
             ### ⚙️ INSTRUÇÕES GERAIS
             - Se faltar email, procure na lista ou use o padrão `@sharkdev.com.br`.
@@ -198,6 +205,8 @@ class AgentFactory:
         if user_credentials:
             self.create_event_tool.set_credentials(user_credentials)
             self.check_calendar_tool.set_credentials(user_credentials)
+            self.check_email_tool.set_credentials(user_credentials)
+
         
         try:
             inputs = {"messages": history_objects + [HumanMessage(content=current_content)]}

@@ -25,7 +25,9 @@ class MemoryGoogleAuth:
         self.SCOPES = [
             "https://www.googleapis.com/auth/calendar",
             "https://www.googleapis.com/auth/userinfo.email",
-            "openid"
+            "openid",
+            "https://www.googleapis.com/auth/gmail.readonly", 
+            "https://www.googleapis.com/auth/gmail.send"
         ]
 
     def get_flow(self):

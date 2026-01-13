@@ -38,3 +38,5 @@ class CheckCalendarInput(BaseModel):
     start_date: DateParts = Field(description="Data, Horas e Minutos iniciais do filtro de pesquisa")
     end_date: DateParts = Field(description="Data, Horas e Minutos finais do filtro de pesquisa")
     email: str = Field(description="Email a ser verificado.")
+class CheckEmailInput(BaseModel):
+    max_results:int = Field(default=5, description="Quantidade de emails a serem conferidos")

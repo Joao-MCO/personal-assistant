@@ -78,8 +78,7 @@ class AppSettings:
         secret_json = get_secret("GOOGLE_CLIENT_SECRET") or get_secret("client_secret") or "client_secret.json"
         return {
             "client_secret": secret_json,
-            "calendar_id": "primary",
-            "scopes": ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/userinfo.email"]
+            "calendar_id": "primary"
         }
 
     @property

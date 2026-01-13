@@ -3,7 +3,7 @@ from googleapiclient.discovery import build
 
 logger = logging.getLogger(__name__)
 
-def get_service(credentials=None):
+def get_service(credentials=None, service="calendar"):
     """
     Constrói o serviço do Google Calendar usando credenciais fornecidas explicitamente.
     """
@@ -18,7 +18,12 @@ def get_service(credentials=None):
     try:
         # FIX: cache_discovery=False evita o erro 'file_cache is only supported...'
         # em ambientes de container/cloud como o Streamlit Share.
-        return build("calendar", "v3", credentials=credentials, cache_discovery=False)
+        gservice = None
+        if service == "calendar":
+            gservice = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+        elif service == "gmail":
+            gservice = build("gmail", "v1", credentials=credentials)
+        return gservice
     except Exception as e:
         logger.error(f"Erro ao construir serviço Google: {e}")
         return None
