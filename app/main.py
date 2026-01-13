@@ -133,7 +133,7 @@ def setup_authentication():
     # Inicializa o Autenticador
     auth = MemoryGoogleAuth(
         client_config=client_config,
-        redirect_uri="https://cidinha-shark.streamlit.app" 
+        redirect_uri=Settings.auth["redirect_uri"] 
     )
     
     # Verifica callback do login
