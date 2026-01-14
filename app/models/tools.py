@@ -1,6 +1,9 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
+from utils.files import get_news_countries
 
+AVAILABLE_COUNTRIES = get_news_countries()
+desc_pais = f"Sigla do país. Opções válidas: {AVAILABLE_COUNTRIES}." if AVAILABLE_COUNTRIES else "Sigla do país (ex: br, us)."
 
 class RPGQuestionInput(BaseModel):
     pergunta: str = Field(description="Pergunta informada pelo usuário.")
@@ -10,10 +13,9 @@ class GenericQuestionInput(BaseModel):
     pergunta: str = Field(description="Pergunta informada pelo usuário.")
 
 class ReadNewsInput(BaseModel):
-    qtde_noticias: int = Field(default=5, description="Quantidade de notícias a serem buscadas.")
-    assuntos: str = Field(default="", description="Temas ou palavras-chave da pesquisa.")
-    pais: str = Field(default="br", description="Sigla do País ao qual se refere as notícias desejadas. (Ex: ar, br, us, en)")
-
+    qtde_noticias: int = Field(default=3, description="Quantidade de notícias POR TEMA.")
+    assuntos: str = Field(..., description="Lista de temas separados por vírgula (ex: 'world, technology'). Use 'all' para busca geral.")
+    pais: str = Field(default="br", description=desc_pais)
 class CodeHelperInput(BaseModel):
     pergunta: str = Field(description="Pergunta ou código informado pelo usuário para análise.")
 

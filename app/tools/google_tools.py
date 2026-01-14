@@ -218,27 +218,17 @@ class CheckEmail(BaseTool):
 
         try:
             filtros = []
-            
-            # --- Correção Inteligente de Datas ---
-            # Se o LLM mandar a mesma data para inicio e fim (ex: buscar emails "do dia 13"),
-            # o Gmail retornaria vazio pois 'before' é exclusivo.
-            # Aqui nós empurramos o 'before' para o dia seguinte automaticamente.
             if data_inicio and data_fim and data_inicio == data_fim:
                 try:
-                    # Tenta converter para somar 1 dia
                     dt_fim = datetime.strptime(data_fim, "%Y/%m/%d")
                     dt_fim_ajustada = dt_fim + timedelta(days=1)
                     data_fim = dt_fim_ajustada.strftime("%Y/%m/%d")
                 except ValueError:
-                    pass # Se formato estiver errado, segue o padrão sem crashar
+                    pass
 
-            # 1. Filtro por palavra-chave
             if query:
-                # Removemos as aspas duplas forçadas para tornar a busca mais flexível
-                # (ex: achar "the news" mesmo se o sender for "the news ☕")
                 filtros.append(f'{query}') 
             
-            # 2. Filtros de Data
             if data_inicio:
                 filtros.append(f"after:{data_inicio}")
             
@@ -247,7 +237,6 @@ class CheckEmail(BaseTool):
 
             query_string = " ".join(filtros) if filtros else None
 
-            # --- Chamada da API ---
             results = service.users().messages().list(
                 userId='me',
                 labelIds=['INBOX'],

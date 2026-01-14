@@ -3,7 +3,7 @@ import json
 import base64
 import operator
 import streamlit as st
-from typing import List, TypedDict, Annotated, Sequence
+from typing import Dict, List, TypedDict, Annotated, Sequence
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.chat_models import ChatMaritalk
@@ -12,6 +12,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from utils.files import get_emails
 from tools.google_tools import CheckCalendar, CheckEmail, CreateEvent, SendEmail
 from utils.settings import Settings
 from tools.manager import agent_tools
@@ -87,12 +88,7 @@ class AgentFactory:
         self.tools = self.session_tools
 
         # 1. CARREGAR E-MAILS
-        try:
-            with open("app/assets/emails.json", "r", encoding="utf-8") as f:
-                emails_list = json.load(f)
-                emails_str = json.dumps(emails_list, ensure_ascii=False).replace("{", "{{").replace("}", "}}")
-        except:
-            emails_str = "[]"
+        emails_str = get_emails(True)
 
         # 2. CONTEXTO TEMPORAL
         agora = datetime.datetime.now()
@@ -107,6 +103,8 @@ class AgentFactory:
         dia_hoje_pt = dias_pt.get(dia_semana, dia_semana)
 
         # 3. PROMPT
+        # ... (código anterior no __init__) ...
+
         template = f"""
             ### 🧠 PERFIL
             Você é a **Cidinha**, assistente virtual executiva da SharkDev.
@@ -120,13 +118,40 @@ class AgentFactory:
             ### 🛠️ REGRAS DE SELEÇÃO DE FERRAMENTAS
             1. **Agenda/Reuniões:** Use `ConsultarAgenda` ou `CriarEvento`.
             2. **Emails/Ticket Blip:** Use `ConsultarEmail` ou `EnviarEmail`.
-            3. **Notícias:** Use `LerNoticias`.
+            3. **Notícias:** Use `LerNoticias`. **Siga estritamente as DIRETRIZES DE NOTÍCIAS abaixo.**
             4. **RPG/D&D:** Use `DuvidasRPG`.
-            5. **Códigos:** Use `AjudaProgramacao`
+            5. **Códigos:** Use `AjudaProgramacao`.
             6. **TUDO O MAIS (Técnico ou Geral):** Use a ferramenta `AjudaShark`.
             7. **Papo Furado:** Se o usuário disser apenas "Oi", "Bom dia" ou "Obrigado", **NÃO** chame ferramentas. Responda diretamente.
 
+            ### 📰 DIRETRIZES ESTRITAS DE NOTÍCIAS
+            Ao usar a ferramenta `LerNoticias`, você receberá dados brutos de várias notícias. 
+            Sua tarefa é atuar como um **Editor Chefe** e compilar isso EXATAMENTE no formato abaixo.
+            
+            1. **Deduplicação:** Jamais repita a mesma notícia em temas diferentes. Se ela se encaixa em dois temas, escolha o mais relevante.
+            2. **Sem Conversa:** NÃO inicie a resposta com "Aqui estão as notícias" ou "Segue o resumo". Comece DIRETAMENTE pelo primeiro título.
+            
+            **REGRAS DE FORMATAÇÃO (MARKDOWN OBRIGATÓRIO):**
+            Para CADA notícia selecionada, use este bloco exato:
+
+            ## [Título da Notícia em Negrito]
+            **Fontes:** [Nome do Site/Fonte]
+
+            **Data:** [Data e Hora de Publicação Formatada]
+            
+            [Parágrafo 1: Resumo direto do fato - O que, quem, quando.] (Max 500 caracteres)
+            
+            [Parágrafo 2: Contexto ou desdobramento rápido.] (Max 500 caracteres)
+            
+            ---
+            (Repita o bloco acima para cada notícia)
+
+            **REGRAS DE USO:**
+            - Se não for especificado o assunto, a ferramenta trará automaticamente os tópicos: general, world, nation, business, technology, entertainment, sports, science e health.
+            - Caso não encontre nenhuma, informe na mensagem que não houve atualizações.
+
             ### ⚙️ INSTRUÇÕES GERAIS
+            - Sempre que possível, chame o usuário pelo nome informado.
             - Se faltar email, procure na lista ou use o padrão `@sharkdev.com.br`.
             - Seja proativa e educada.
             - Quando criar um evento ou enviar um email, retorne um resumo dos parâmetros usados. 
@@ -161,7 +186,7 @@ class AgentFactory:
             messages = state["messages"]
             last_message = messages[-1]
             if isinstance(last_message, ToolMessage):
-                if last_message.name in ["CriarEvento","ConsultarAgenda", "LerNoticias", "ConsultarEmail", "EnviarEmail"]:
+                if last_message.name in ["CriarEvento","ConsultarAgenda", "ConsultarEmail", "EnviarEmail", "LerNoticias"]:
                     return "agent"
                 
                 if last_message.name in [ "RPGQuestion", "AjudaShark", "CodeHelper"]:
@@ -186,7 +211,7 @@ class AgentFactory:
             elif role == "assistant": history.append(AIMessage(content=str(content)))
         return history
 
-    def invoke(self, input_text: str, session_messages: List[dict], uploaded_files: List[dict] = None, user_credentials=None):
+    def invoke(self, input_text: str, session_messages: List[dict], uploaded_files: List[dict] = None, user_credentials=None, user_infos=None):
         history_objects = self._reconstruct_history(session_messages)
         current_content = []
         if input_text: current_content.append({"type": "text", "text": input_text})
@@ -211,6 +236,7 @@ class AgentFactory:
             self.check_email_tool.set_credentials(user_credentials)
             self.send_email_tool.set_credentials(user_credentials)
 
+        if ('email' in user_infos) and ('nome' in user_infos): current_content.append({"type": "text", "text": f"Informações de quem está falando com você:\nNome: {user_infos['user']}\nE-mail: {user_infos['email']}"})
         
         try:
             inputs = {"messages": history_objects + [HumanMessage(content=current_content)]}

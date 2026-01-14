@@ -17,3 +17,6 @@ def init_session_state():
     
     if 'uploader_key' not in st.session_state:
         st.session_state['uploader_key'] = 0
+
+    if 'user' not in st.session_state:
+        st.session_state['user'] = "Usuário"

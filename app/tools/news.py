@@ -1,101 +1,91 @@
-import ast
 import time
-import uuid
-from typing import Type, Union, Dict, Any
+import requests
+import json
+from typing import Type
+from datetime import date, timedelta
 from langchain_core.tools import BaseTool
-from langchain_community.chat_models import ChatMaritalk
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from models.tools import ReadNewsInput
 from utils.settings import Settings
-import requests
-from datetime import date, timedelta
 
 class ReadNews(BaseTool):
     name: str = "LerNoticias"
     description: str = """
-    Utilize esta ferramenta sempre que for solicitado que você leia ou atualize alguém sobre as notícias diárias.
+    Busca notícias atuais usando a API GNews.
+    O sistema itera sobre cada tema solicitado para garantir cobertura completa.
     """
     args_schema: Type[BaseModel] = ReadNewsInput
-    return_direct: bool = True
+    return_direct: bool = False # False para permitir que o Agente formate o Markdown final
 
-    def _run(self, qtde_noticias: int = 10, assuntos: str = "", pais: str = "br") -> str:
+    def _run(self, qtde_noticias: int = 3, assuntos: str = "", pais: str = "br") -> str:
+        # Configuração de Datas
         today = date.today()
-        start_date = today - timedelta(days=30)
-        query_param = f"q={assuntos}&" if assuntos else ""
-        print(f"Filtros: \nQTD: {qtde_noticias}\nAssuntos: {assuntos}\nPaís: {pais}")
-        url = (
-            f"https://gnews.io/api/v4/search?{query_param}"
-            f"lang=pt&max={qtde_noticias}&country={pais}"
-            f"&from={start_date}&to={today}"
-            f"&sortBy=publishedAt&apikey={Settings.gnews_api_key}"
-        )
-
-        start = time.time()
-        response = requests.get(url)
-        data = response.json()
-        end = time.time()
-        print(f"Tempo gasto pela API: {(end-start)}s")
+        start_date = today - timedelta(days=2) # Pega notícias de até 2 dias atrás para garantir frescor
         
-        if 'articles' not in data:
-            return "Não foi possível encontrar notícias ou houve erro na API."
+        # Definição dos tópicos a buscar
+        topicos_padrao = ["general", "world", "nation", "business", "technology", "entertainment", "sports", "science", "health"]
+        assuntos_lower = assuntos.lower().strip()
+        
+        if assuntos_lower in ["all", "geral", "noticias", ""]:
+            lista_temas = topicos_padrao
+        else:
+            lista_temas = [t.strip() for t in assuntos.split(',')]
 
-        news_cleaned = []
-        for article in data['articles']:
-            news_cleaned.append({
-                "title": article.get('title'),
-                "description": article.get('description'),
-                "content": article.get('content'),
-                "source": article.get('source', {}).get('name')
-            })
+        print(f"🔎 Buscando GNews para: {lista_temas} ({pais})")
+        
+        resultados_finais = []
+        seen_titles = set() # Deduplicação por título
 
-        if not news_cleaned:
-            return f"Não encontrei notícias recentes sobre '{assuntos}' no país '{pais}'."
+        for tema in lista_temas:
+            try:
+                # Lógica de Endpoint (Top Headlines vs Search) do SEU código
+                # Se o tema for uma categoria oficial do GNews, usa top-headlines
+                if tema in topicos_padrao:
+                    url = (
+                        f"https://gnews.io/api/v4/top-headlines?category={tema}"
+                        f"&max={qtde_noticias}&country={pais}"
+                        f"&from={start_date}T00:00:00Z&to={today}T23:59:59Z"
+                        f"&apikey={Settings.gnews_api_key}"
+                    )
+                else:
+                    # Se for um termo específico (ex: "Petrobras"), usa search
+                    url = (
+                        f"https://gnews.io/api/v4/search?q={tema}"
+                        f"&max={qtde_noticias}&country={pais}"
+                        f"&from={start_date}T00:00:00Z&to={today}T23:59:59Z"
+                        f"&sortBy=publishedAt&apikey={Settings.gnews_api_key}"
+                    )
 
-        parser = StrOutputParser()
-        llm = ChatMaritalk(
-            model=Settings.maritaca["model"],
-            api_key=Settings.maritaca["api_key"],
-            temperature=Settings.temperature,
-            max_tokens=Settings.max_tokens
-        )
+                response = requests.get(url)
+                data = response.json()
+                
+                if 'articles' not in data:
+                    print(f"Erro API GNews ({tema}): {data}")
+                    continue
 
-        prompt = PromptTemplate(
-            template="""
-            ### PAPEL
-            Você é um Editor Sênior. Sua tarefa é ler as notícias abaixo e criar **mini-artigos consolidados**.
+                tema_buffer = []
+                for article in data['articles']:
+                    title = article.get('title')
+                    if title in seen_titles: continue # Evita duplicatas
+                    seen_titles.add(title)
 
-            ### INSTRUÇÕES
-            1. **Agrupamento:** Junte notícias sobre o mesmo tema.
-            2. **Redação:** Escreva um texto fluido (não tópicos) para cada grupo.
-            3. **Tamanho:** Escreva **2 parágrafos** para cada grupo. Seja detalhista, mas objetivo.
-               - O texto deve ter entre 500 e 1000 caracteres por grupo (aprox. 150 palavras).
+                    desc = article.get('description', '')
+                    source = article.get('source', {}).get('name')
+                    pub_date = article.get('publishedAt', '')[:10] # Pega só a data YYYY-MM-DD
+                    
+                    tema_buffer.append(f"- [{pub_date}] {title}\n  Fonte: {source}\n  Resumo: {desc}")
 
-            ### FORMATO DE SAÍDA (Markdown)
-            
-            ## [Título Jornalístico do Grupo]
-            **Fontes:** [Lista de Fontes]
+                if tema_buffer:
+                    resultados_finais.append(f"\n--- TEMA: {tema.upper()} ---")
+                    resultados_finais.extend(tema_buffer)
 
-            **Data:"" [Data da Notícia]
+                # Pausa rápida para não estourar rate limit da API (se for conta free)
+                time.sleep(0.2)
+                
+            except Exception as e:
+                print(f"Erro ao buscar {tema}: {e}")
 
-            [Parágrafo 1: O que aconteceu, quem, quando e onde...]
+        if not resultados_finais:
+            return "Não encontrei notícias recentes. Verifique a API Key ou os termos."
 
-            [Parágrafo 2: Contexto, reações, citações ou desdobramentos...]
-
-            ---
-            ### NOTÍCIAS PARA ANÁLISE
-            {news}
-            """,
-            input_variables=["news"]
-        )
-
-        chain = prompt | llm | parser
-
-        start = time.time()
-        response = chain.invoke({"news": str(news_cleaned)})
-        end = time.time()
-
-        print(f"Tempo gasto pela LLM: {(end-start)}s")
-
-        return response
+        return "\n".join(resultados_finais)

@@ -5,6 +5,7 @@ import requests
 import streamlit as st
 import google.oauth2.credentials
 from google_auth_oauthlib.flow import Flow
+from utils.files import get_emails
 from interface.styles import apply_custom_styles
 from interface.render import render_header, render_chat_history, render_upload_warning
 from interface.state import init_session_state
@@ -158,8 +159,9 @@ def main():
             st.warning("Faça login para usar a Agenda.")
         else:
             user_info = st.session_state.get("user_info", {})
-            print(user_info)
-            st.success(f"Olá, **{user_info.get('name', 'Usuário')}**!")
+            st.session_state['user'] = (list(filter(lambda x: x['email'] == user_info['email'], get_emails()))[0]['nome']).replace(" - SharkDev", "")
+            st.session_state['email'] = user_info['email']
+            st.success(f"Olá, **{st.session_state['user']}**!")
             
             if st.button("Sair"):
                 auth.logout()
@@ -228,7 +230,8 @@ def main():
                         input_text=user_text or "Processar anexos", 
                         session_messages=st.session_state['messages'],
                         uploaded_files=files_to_send,
-                        user_credentials=user_creds 
+                        user_credentials=user_creds,
+                        user_infos=st.session_state
                     )
                     
                     outputs = response.get('output', [])
