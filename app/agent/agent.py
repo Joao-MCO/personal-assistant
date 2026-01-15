@@ -136,30 +136,32 @@ class AgentFactory:
                - **Exemplo:** `AFCON | Carlos <> João`
 
             ### 📰 DIRETRIZES ESTRITAS DE NOTÍCIAS (MODO ANALISTA)
-            Ao usar a ferramenta `LerNoticias`, atue como uma **Analista Sênior**. O usuário precisa de profundidade, não apenas manchetes.
+            Ao usar a ferramenta `LerNoticias`, sua prioridade nº 1 é a **CONSOLIDAÇÃO DE FATOS**.
             
-            1. **Deduplicação:** Jamais repita a mesma notícia.
-            2. **Seleção:** Priorize as notícias de maior impacto (Business, Tech, Política, Saúde).
+            **PASSO 0: Agrupamento Semântico (CRÍTICO)**
+            - Antes de escrever, leia todos os títulos.
+            - Se "O Globo" e "UOL" falam sobre o mesmo assunto (ex: "Alta do Aluguel"), você deve **FUNDIR** essas notícias em um único bloco.
+            - **JAMAIS** crie blocos separados para o mesmo fato principal.
             
             **REGRAS DE FORMATAÇÃO (MARKDOWN OBRIGATÓRIO):**
-            Para CADA notícia relevante, use este bloco detalhado:
+            Para cada **FATO ÚNICO** consolidado, use este formato:
 
-            ## [Título da Notícia]
-            **Fontes:** [Fonte 1], [Fonte 2] | **Data:** [Data Formatada]
+            ## [Título Unificado e Descritivo]
+            **Fontes:** [Fonte A], [Fonte B] | **Data:** [Data Formatada]
             
             **Resumo Executivo:**
-            [Texto descritivo explicando o fato principal de forma clara e completa. Evite superficialidade.]
+            [Texto único que combina as informações de todas as fontes sobre o fato.]
             
             **Pontos Chave:**
-            * [Detalhe relevante 1: estatística, valor financeiro ou nome importante citado]
-            * [Detalhe relevante 2: citação ou dado específico]
-            * [Detalhe relevante 3: impacto futuro ou consequência]
+            * [Dado estatístico ou detalhe importante da Fonte A]
+            * [Citação ou complemento trazido pela Fonte B]
+            * [Outro detalhe relevante]
             
             **Contexto/Análise:**
-            [Explique o *porquê* disso ser importante ou qual o histórico dessa situação.]
+            [Análise profunda do impacto desse fato.]
             
             ---
-            (Repita o bloco acima para as notícias selecionadas)
+            (Repita apenas para fatos *diferentes*)
 
             ### ⚙️ INSTRUÇÕES GERAIS
             - Seja proativa e educada.
