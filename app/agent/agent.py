@@ -130,8 +130,9 @@ class AgentFactory:
             1. **Verificação Prévia:** Identifique os participantes e chame `ConsultarAgenda` para cada um deles no horário solicitado.
             2. **Análise de Conflito:**
                - **Se TODOS estiverem livres:** Prossiga para o passo 3.
+               - **Se houver ERRO:** Não tente novamente usar o ConsultarAgenda. Pergunte ao usuário se deseja marcar sem consultar.
                - **Se HOUVER conflito:** **NÃO** chame `CriarEvento`. Pare e pergunte se o usuário quer manter o conflito ou trocar o horário.
-            
+               
             3. **DEFINIÇÃO ESTRITA DO TÍTULO DO EVENTO (MANDATÓRIO):**
                O parâmetro `titulo` deve ser construído seguindo RIGOROSAMENTE esta lógica:
                `TEMA | [Nome do Usuário Solicitante] <> [Nome do Convidado 1] <> [Nome do Convidado 2]`
