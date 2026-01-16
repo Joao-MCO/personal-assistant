@@ -83,21 +83,7 @@ class AgentFactory:
     def _get_llm_instance(self, model_name):
         """Centraliza a lógica de instanciação da LLM com tratamento de erros."""
         try:
-            if model_name == "maritaca":
-                logger.info("Instanciando ChatMaritalk")
-                return ChatMaritalk(
-                    api_key=Settings.maritaca["api_key"], 
-                    model=Settings.maritaca["model"],
-                    temperature=0.7
-                )
-            elif model_name == "claude":
-                logger.info("Instanciando ChatAnthropic (Claude)")
-                return ChatAnthropic(
-                    api_key=Settings.claude["api_key"], 
-                    model=Settings.claude["model"],
-                    temperature=0.7
-                )
-            elif model_name == "gpt":
+            if model_name == "gpt":
                 logger.info("Instanciando ChatOpenAI (GPT)")
                 return ChatOpenAI(
                     api_key=Settings.openai["api_key"], 
