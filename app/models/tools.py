@@ -1,53 +1,131 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
 from utils.files import get_news_countries
 
+# Carrega países válidos ou usa fallback
 AVAILABLE_COUNTRIES = get_news_countries()
-desc_pais = f"Sigla do país. Opções válidas: {AVAILABLE_COUNTRIES}." if AVAILABLE_COUNTRIES else "Sigla do país (ex: br, us)."
+paises_validos = [p['code'] for p in AVAILABLE_COUNTRIES] if AVAILABLE_COUNTRIES else ["br", "us"]
 
-class RPGQuestionInput(BaseModel):
-    pergunta: str = Field(description="Pergunta informada pelo usuário.")
-    temas: List[str] = Field(description="Lista dos principais temas. Limite Máximo: 5")
-
-class GenericQuestionInput(BaseModel):
-    pergunta: str = Field(description="Pergunta informada pelo usuário.")
+# =========================================
+# 1. Ferramentas de Informação (News, RPG, Code, Shark)
+# =========================================
 
 class ReadNewsInput(BaseModel):
-    qtde_noticias: int = Field(default=3, description="Quantidade de notícias POR TEMA.")
-    assuntos: str = Field(..., description="Lista de temas separados por vírgula (ex: 'world, technology'). Use 'all' para busca geral.")
-    pais: str = Field(default="br", description=desc_pais)
+    qtde_noticias: int = Field(
+        default=3, 
+        description="Quantidade de notícias para buscar POR TEMA."
+    )
+    assuntos: str = Field(
+        ..., 
+        description="Lista de temas de interesse separados por vírgula (ex: 'tecnologia, mercado financeiro')."
+    )
+    pais: str = Field(
+        default="br", 
+        description=f"Sigla do país para busca. Opções válidas: {paises_validos}"
+    )
+
 class CodeHelperInput(BaseModel):
-    pergunta: str = Field(description="Pergunta ou código informado pelo usuário para análise.")
+    pergunta: str = Field(
+        ..., 
+        description="O código para análise, snippet de erro ou a pergunta técnica detalhada sobre programação."
+    )
 
 class SharkHelperInput(BaseModel):
-    pergunta: str = Field(description="Pergunta informada pelo usuário.")
-    temas: List[str] = Field(defaul=[], description="Lista dos principais temas. Limite Máximo: 5")
+    pergunta: str = Field(
+        ..., 
+        description="A dúvida do usuário relacionada à SharkDev, processos internos ou plataforma Blip."
+    )
+    temas: List[str] = Field(
+        default=[], 
+        description="Lista de palavras-chave (tags) para auxiliar a busca no banco vetorial."
+    )
 
-class DateParts(BaseModel):
-    day: int = Field(description="Dia do mês (1-31)")
-    month: int = Field(description="Mês (1-12)")
-    year: int = Field(description="Ano (ex: 2026)")
-    hours: int = Field(description="Hora (0-23)")
-    minutes: int = Field(description="Minutos (0-59)")
-class CreateEventInput(BaseModel):
-    meeting_date: DateParts = Field(description="Data, Horas e Minutos da reunião")
-    description: str = Field(description="Título do evento")
-    attendees: Optional[List[str]] = Field(default=None, description="Lista de e-mails")
-    meet_length: int = Field(default=30, description="Duração em minutos")
-    timezone: str = Field(default="America/Sao_Paulo")
+class RPGQuestionInput(BaseModel):
+    pergunta: str = Field(
+        ..., 
+        description="A pergunta do usuário sobre regras, lore ou criação de personagem em D&D 5e."
+    )
+    temas: List[str] = Field(
+        default=[], 
+        description="Lista de tópicos principais da pergunta para melhorar a busca no RAG (ex: ['mago', 'magia', 'nível 5'])."
+    )
+
+class GenericQuestionInput(BaseModel):
+    pergunta: str = Field(description="Pergunta genérica.")
+
+
+# =========================================
+# 2. Ferramentas de Produtividade (Google)
+# =========================================
 
 class CheckCalendarInput(BaseModel):
-    start_date: DateParts = Field(description="Data, Horas e Minutos iniciais do filtro de pesquisa")
-    end_date: DateParts = Field(description="Data, Horas e Minutos finais do filtro de pesquisa")
-    email: str = Field(description="Email a ser verificado.")
+    start_date: dict = Field(
+        ..., 
+        description="Objeto representando a data de início da busca (chaves: year, month, day, hours, minutes)."
+    )
+    end_date: dict = Field(
+        ..., 
+        description="Objeto representando a data de fim da busca (chaves: year, month, day, hours, minutes)."
+    )
+    email: str = Field(
+        default="primary", 
+        description="ID do calendário a ser verificado (geralmente o email). Use 'primary' para o padrão."
+    )
+
 class CheckEmailInput(BaseModel):
-    max_results: int = Field(default=5, description="Quantidade de emails a serem conferidos")
-    query: Optional[str] = Field(default=None, description="Palavra-chave ou frase para buscar no assunto ou corpo do email.")
-    data_inicio: Optional[str] = Field(default=None, description="Data inicial para o filtro (formato YYYY/MM/DD).")
-    data_fim: Optional[str] = Field(default=None, description="Data final para o filtro (formato YYYY/MM/DD).")
+    max_results: int = Field(
+        default=5, 
+        description="Número máximo de e-mails recentes a serem recuperados."
+    )
+    query: Optional[str] = Field(
+        default=None, 
+        description="Termo de busca para filtrar e-mails (ex: 'assunto:Reunião', 'from:chefe@empresa.com'). Se vazio, traz os mais recentes."
+    )
+    data_inicio: Optional[str] = Field(
+        default=None, 
+        description="Data inicial opcional para filtro (formato YYYY/MM/DD)."
+    )
+    data_fim: Optional[str] = Field(
+        default=None, 
+        description="Data final opcional para filtro (formato YYYY/MM/DD)."
+    )
 
 class SendEmailInput(BaseModel):
-    to: str = Field(description="O endereço de email do destinatário (ex: usuario@exemplo.com).")
-    subject: str = Field(description="O assunto ou título do email.")
-    body: str = Field(description="O conteúdo principal da mensagem a ser enviada.")
-    body_type: str = Field(default='plain', description="O formato do corpo do email. Use 'html' para formatação rica ou 'plain' para texto puro.")
+    to: str = Field(
+        ..., 
+        description="Endereço de e-mail do destinatário."
+    )
+    subject: str = Field(
+        ..., 
+        description="Assunto do e-mail."
+    )
+    body: str = Field(
+        ..., 
+        description="Conteúdo da mensagem."
+    )
+    body_type: Literal['plain', 'html'] = Field(
+        default='plain', 
+        description="Formato do corpo do e-mail: use 'plain' para texto simples ou 'html' para formatação rica."
+    )
+
+class CreateEventInput(BaseModel):
+    meeting_date: dict = Field(
+        ..., 
+        description="Objeto com a data/hora de início da reunião (year, month, day, hours, minutes)."
+    )
+    description: str = Field(
+        ..., 
+        description="Título e descrição do evento (ex: 'Daily | Ana <> Pedro')."
+    )
+    attendees: Optional[List[str]] = Field(
+        default=None, 
+        description="Lista de e-mails dos convidados."
+    )
+    meet_length: int = Field(
+        default=30, 
+        description="Duração da reunião em minutos."
+    )
+    timezone: str = Field(
+        default="America/Sao_Paulo", 
+        description="Fuso horário do evento."
+    )

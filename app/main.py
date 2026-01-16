@@ -9,7 +9,7 @@ from utils.files import get_emails
 from interface.styles import apply_custom_styles
 from interface.render import render_header, render_chat_history, render_upload_warning
 from interface.state import init_session_state
-from utils.settings import Settings
+from utils.settings import WrappedSettings as Settings # ALTERAÇÃO: Usa o wrapper novo
 
 # Configurações para ambiente de desenvolvimento/cloud
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
@@ -94,16 +94,23 @@ class MemoryGoogleAuth:
 
 
 def setup_authentication():
-    """Configura a autenticação usando Settings (Env Vars) e a classe em memória."""
+    """Configura a autenticação usando Settings e a classe em memória."""
+    # O Wrapper Settings.google retorna um dict {'client_secret': ..., 'calendar_id': ...}
     client_secret_data = Settings.google.get('client_secret')
     
     if not client_secret_data:
-        st.error("❌ Erro de Configuração: Variável 'client_secret' não encontrada.")
-        st.stop()
+        # Se não houver segredo, não bloqueia o app, mas impede login
+        return None
         
+    # Tenta tratar se vier como string JSON ou dict
     if isinstance(client_secret_data, str):
         try:
-            client_config = json.loads(client_secret_data)
+            # Se for caminho de arquivo
+            if client_secret_data.endswith('.json') and os.path.exists(client_secret_data):
+                 with open(client_secret_data, 'r') as f:
+                     client_config = json.load(f)
+            else:
+                client_config = json.loads(client_secret_data)
         except json.JSONDecodeError:
             st.error("❌ Erro: O conteúdo de 'client_secret' não é um JSON válido.")
             st.stop()
@@ -154,18 +161,31 @@ def main():
             
         st.markdown("### Acesso")
         
-        if not st.session_state.get("connected", False):
-            auth.login()
-            st.warning("Faça login para usar a Agenda.")
+        if auth:
+            if not st.session_state.get("connected", False):
+                auth.login()
+                st.warning("Faça login para usar a Agenda.")
+            else:
+                user_info = st.session_state.get("user_info", {})
+                # Filtra nome amigável se possível
+                nome_user = user_info.get('name', 'Usuário')
+                try:
+                    # Tenta buscar na lista de e-mails interna se disponível
+                    emails_internos = get_emails()
+                    match = next((x for x in emails_internos if x['email'] == user_info.get('email')), None)
+                    if match:
+                        nome_user = match['nome'].replace(" - SharkDev", "")
+                except: pass
+
+                st.session_state['user'] = nome_user
+                st.session_state['email'] = user_info.get('email')
+                st.success(f"Olá, **{st.session_state['user']}**!")
+                
+                if st.button("Sair"):
+                    auth.logout()
+                    st.rerun()
         else:
-            user_info = st.session_state.get("user_info", {})
-            st.session_state['user'] = (list(filter(lambda x: x['email'] == user_info['email'], get_emails()))[0]['nome']).replace(" - SharkDev", "")
-            st.session_state['email'] = user_info['email']
-            st.success(f"Olá, **{st.session_state['user']}**!")
-            
-            if st.button("Sair"):
-                auth.logout()
-                st.rerun()
+            st.info("Autenticação Google não configurada (Client Secret ausente).")
 
     render_header()
     render_chat_history()
@@ -201,13 +221,19 @@ def main():
             if uploaded_files:
                 file_names = [f.name for f in uploaded_files]
                 for f in uploaded_files:
-                    files_to_send.append({"data": f.getvalue(), "mime": f.type})
+                    # Armazena metadados e conteúdo para envio ao agente
+                    files_to_send.append({
+                        "name": f.name,
+                        "data": f.getvalue(), 
+                        "mime": f.type
+                    })
                     if f.type.startswith("image/"):
                         msg_images.append(f.getvalue())
                 
                 anexo_str = f"\n\n*(📎 Anexos: {', '.join(file_names)})*"
                 display_text += anexo_str
 
+            # Adiciona mensagem do usuário ao histórico local
             st.session_state['messages'].append({
                 "role": "user", 
                 "content": display_text,
@@ -221,7 +247,7 @@ def main():
 
             with st.spinner("A Pamela não vai gostar nada disso..."):
                 try:
-                    user_creds = auth.credentials
+                    user_creds = auth.credentials if auth else None
 
                     if st.session_state.get('connected') and not user_creds:
                         logger.warning("UI diz conectado, mas credenciais estão vazias.")

@@ -1,29 +1,30 @@
 import logging
+import streamlit as st
 from googleapiclient.discovery import build
 
 logger = logging.getLogger(__name__)
 
-def get_service(credentials=None, service="calendar"):
+@st.cache_resource(ttl=3600)
+def get_cached_service(_credentials, service_name, service_version):
     """
-    Constrói o serviço do Google Calendar usando credenciais fornecidas explicitamente.
+    Cria e cacheia o serviço do Google.
+    O underscore em _credentials diz ao Streamlit para não tentar fazer hash desse objeto complexo.
     """
-    # Silencia o aviso sobre discovery_cache (camada extra de segurança)
-    logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
-
-    if not credentials or not credentials.valid:
-        # Logamos como WARNING, mas retornamos None para a ferramenta tratar
-        logger.warning("Tentativa de criar serviço Google sem credenciais válidas.")
-        return None
-
     try:
-        # FIX: cache_discovery=False evita o erro 'file_cache is only supported...'
-        # em ambientes de container/cloud como o Streamlit Share.
-        gservice = None
-        if service == "calendar":
-            gservice = build("calendar", "v3", credentials=credentials, cache_discovery=False)
-        elif service == "gmail":
-            gservice = build("gmail", "v1", credentials=credentials)
-        return gservice
+        # cache_discovery=False é vital para ambientes cloud/docker
+        return build(service_name, service_version, credentials=_credentials, cache_discovery=False)
     except Exception as e:
-        logger.error(f"Erro ao construir serviço Google: {e}")
+        logger.error(f"Erro ao construir serviço {service_name}: {e}")
         return None
+
+def get_service(credentials=None, service="calendar"):
+    if not credentials or not credentials.valid:
+        logger.warning("Credenciais inválidas ou ausentes.")
+        return None
+
+    if service == "calendar":
+        return get_cached_service(credentials, "calendar", "v3")
+    elif service == "gmail":
+        return get_cached_service(credentials, "gmail", "v1")
+    
+    return None

@@ -1,122 +1,88 @@
-import json
-import logging
 import os
 import streamlit as st
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
+from typing import Optional
 
-load_dotenv()
-
-def get_secret(key, default=None):
-    """Busca o segredo de forma robusta e Case-Insensitive"""
-    # 1. Tenta busca direta
-    try:
-        if key in st.secrets:
-            return st.secrets[key]
-    except:
-        pass
-
-    # 2. Tenta busca varrendo as chaves (para evitar problemas de maiúsculas/minúsculas)
-    try:
-        key_lower = key.lower()
-        for k, v in st.secrets.items():
-            if k.lower() == key_lower:
-                return v
-    except:
-        pass
-        
-    # 3. Tenta do ambiente
-    return os.getenv(key, default)
-
-class AppSettings:
-    """
-    Classe dinâmica que busca as configurações sempre que são acessadas.
-    Isso evita problemas de cache onde a chave aparece como None porque
-    foi lida antes de estar disponível.
-    """
+class SettingsConfig(BaseSettings):
+    # Modelos e Keys
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-3-flash-preview"
+    GEMINI_EMBEDDING_MODEL: str = "models/embedding-001"
     
-    @property
-    def gemini(self):
-        return {
-            "api_key": get_secret("GEMINI_API_KEY") or get_secret("GOOGLE_API_KEY"),
-            "model": get_secret("GEMINI_MODEL", "gemini-1.5-flash"), 
-            "embedding": get_secret("GEMINI_EMBEDDING_MODEL")
-        }
+    MARITACA_API_KEY: Optional[str] = None
+    MARITACA_MODEL: str = "sabiazinho-4"
+    
+    CLAUDE_API_KEY: Optional[str] = None
+    CLAUDE_MODEL: str = "claude-4-5-haiku-20251001"
+    
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-5.1"
+    
+    # RAG
+    CHROMA_API_KEY: Optional[str] = None
+    CHROMA_TENANT: Optional[str] = "default_tenant"
+    CHROMA_DATABASE: Optional[str] = "default_database"
+    CHROMA_HOST: Optional[str] = None
 
-    @property
-    def maritaca(self):
-        return {
-            "api_key": get_secret("MARITACA_API_KEY"),
-            "model": get_secret("MARITACA_MODEL")
-        }
+    # Google Auth & Tools
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    AUTH_COOKIE_SECRET: str = "change_me_in_production"
+    AUTH_REDIRECT_URI: str = "http://localhost:8501"
+    
+    GNEWS_API_KEY: Optional[str] = None
+    
+    # App Config
+    ORCHESTRATOR_MODEL: str = "gemini"
+    MAX_TOKENS: int = 4000
+    TEMPERATURE: float = 0.4
 
-    @property
-    def claude(self):
-        return {
-            "api_key": get_secret("CLAUDE_API_KEY"),
-            "model": get_secret("CLAUDE_MODEL")
-        }
+    class Config:
+        env_file = ".env"
+        extra = "ignore" # Ignora variaveis extras no .env
 
-    @property
-    def openai(self):
-        return {
-            "api_key": get_secret("OPENAI_API_KEY"),
-            "model": get_secret("OPENAI_MODEL")
-        }
+def load_settings():
+    """Carrega configurações priorizando st.secrets para compatibilidade com Cloud"""
+    # Tenta carregar do .env primeiro via Pydantic
+    settings = SettingsConfig()
+    
+    # Sobrescreve com st.secrets se disponível (Streamlit Cloud)
+    # Isso garante que funcione tanto local (.env) quanto cloud (Secrets)
+    try:
+        if st.secrets:
+            for field in settings.model_fields:
+                # Procura Case Insensitive nos secrets
+                for secret_key, secret_val in st.secrets.items():
+                    if secret_key.upper() == field.upper():
+                        setattr(settings, field, secret_val)
+    except FileNotFoundError:
+        pass # Sem secrets.toml
+        
+    return settings
 
-    @property
-    def chroma(self):
-        return {
-            "api_key": get_secret("CHROMA_API_KEY"),
-            "tenant": get_secret("CHROMA_TENANT"),
-            "database": get_secret("CHROMA_DATABASE"),
-            "host": get_secret("CHROMA_HOST")
-        }
+# Instância Singleton
+Settings = load_settings()
 
+# Propriedades de conveniência para manter compatibilidade com código antigo
+class AppSettingsWrapper:
     @property
-    def google(self):
-        # Tenta recuperar o JSON de credenciais de várias formas
-        secret_json = get_secret("GOOGLE_CLIENT_SECRET") or get_secret("client_secret") or "client_secret.json"
-        return {
-            "client_secret": secret_json,
-            "calendar_id": "primary"
-        }
-
+    def gemini(self): return {"api_key": Settings.GEMINI_API_KEY, "model": Settings.GEMINI_MODEL, "embedding": Settings.GEMINI_EMBEDDING_MODEL}
     @property
-    def auth(self):
-        return {
-            "secret": get_secret("AUTH_COOKIE_SECRET", "chave_secreta_padrao_segura"),
-            "cookie_name": "google_auth_cookie",
-            "expiry_days": 7,
-            "redirect_uri": get_secret("AUTH_REDIRECT_URI", "https://cidinha-shark.streamlit.app"),
-            "client_id": get_secret("GOOGLE_CLIENT_ID")
-            # "client_secret": get_secret("GOOGLE_CLIENT_SECRET")
-        }
-
+    def maritaca(self): return {"api_key": Settings.MARITACA_API_KEY, "model": Settings.MARITACA_MODEL}
     @property
-    def working_days(self):
-        return {
-            "Monday": {"start": "8:00", "end": "18:00"},
-            "Tuesday": {"start": "8:00", "end": "18:00"},
-            "Wednesday": {"start": "8:00", "end": "18:00"},
-            "Thursday": {"start": "8:00", "end": "18:00"},
-            "Friday": {"start": "8:00", "end": "17:00"}
-        }
-
+    def claude(self): return {"api_key": Settings.CLAUDE_API_KEY, "model": Settings.CLAUDE_MODEL}
     @property
-    def gnews_api_key(self):
-        return get_secret("GNEWS_API_KEY")
-
+    def openai(self): return {"api_key": Settings.OPENAI_API_KEY, "model": Settings.OPENAI_MODEL}
     @property
-    def max_tokens(self):
-        return get_secret("MAX_TOKENS")
-
+    def chroma(self): return {"api_key": Settings.CHROMA_API_KEY, "tenant": Settings.CHROMA_TENANT, "database": Settings.CHROMA_DATABASE, "host": Settings.CHROMA_HOST}
     @property
-    def temperature(self):
-        return get_secret("TEMPERATURE")
-
+    def google(self): return {"client_secret": Settings.GOOGLE_CLIENT_SECRET, "calendar_id": "primary"}
     @property
-    def orchestrator(self):
-        return get_secret("ORCHESTRATOR_MODEL")
+    def auth(self): return {"secret": Settings.AUTH_COOKIE_SECRET, "cookie_name": "google_auth", "expiry_days": 7, "redirect_uri": Settings.AUTH_REDIRECT_URI, "client_id": Settings.GOOGLE_CLIENT_ID}
+    @property
+    def gnews_api_key(self): return Settings.GNEWS_API_KEY
+    @property
+    def orchestrator(self): return Settings.ORCHESTRATOR_MODEL
 
-# Instância global que substitui a classe estática antiga
-Settings = AppSettings()
+# Substitui a instância antiga pela Wrapper
+WrappedSettings = AppSettingsWrapper()

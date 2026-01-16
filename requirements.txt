@@ -1,12 +1,11 @@
-# Core dependencies
 python-dotenv
 requests
+pydantic-settings
 
 # LangChain ecosystem
 langchain
 langchain-core
 langchain-community
-# LangGraph (novo)
 langgraph
 
 # LLM providers

@@ -4,6 +4,7 @@ from tools.news import ReadNews
 from tools.codes import CodeHelper
 from tools.shark import SharkHelper
 
+# Instâncias para registro no Agente
 news_tool = ReadNews()
 code = CodeHelper()
 rpg = RPGQuestion()

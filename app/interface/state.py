@@ -1,12 +1,11 @@
 import streamlit as st
 from agent.agent import AgentFactory
-from utils.settings import Settings
+from utils.settings import WrappedSettings as Settings
 
 def init_session_state():
     """Inicializa as variáveis de estado da sessão"""
     if 'factory' not in st.session_state:
-        # CORREÇÃO: Usa "gemini" se Settings.orchestrator for None ou vazio
-        model_to_use = Settings.orchestrator or "gemini"
+        model_to_use = getattr(Settings, "orchestrator", "gemini") or "gemini"
         st.session_state.factory = AgentFactory(llm=model_to_use)
         
     if 'messages' not in st.session_state:
@@ -22,4 +21,4 @@ def init_session_state():
         st.session_state['user'] = "Usuário"
     
     if 'email' not in st.session_state:
-        st.session_state['user'] = ""
+        st.session_state['email'] = "" # Corrigido bug de atribuição errada (era 'user')
