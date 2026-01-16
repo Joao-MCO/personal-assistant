@@ -34,7 +34,7 @@ class SettingsConfig(BaseSettings):
     
     # App Config
     ORCHESTRATOR_MODEL: str = "gemini"
-    MAX_TOKENS: int = 4000
+    MAX_TOKENS: int = 8192
     TEMPERATURE: float = 0.4
 
     class Config:
