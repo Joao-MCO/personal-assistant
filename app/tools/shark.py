@@ -23,11 +23,8 @@ class SharkHelper(BaseTool):
 
     def _run(self, pergunta: str, temas: List[str]) -> str:
         start = time.time()
-        
-        # Tenta buscar contexto, mas não falha se não achar
         try:
             collection = get_collection("shark_helper")
-            # Se a pergunta for muito genérica, a busca pode não retornar nada relevante, e tudo bem.
             if temas:
                 data = collection.query(query_texts=temas, n_results=5)
                 documents = data["documents"]
@@ -39,50 +36,4 @@ class SharkHelper(BaseTool):
             
         end=time.time()
         print(f"Tempo gasto para RAG: {(end-start)}s")
-
-        parser = StrOutputParser()
-        llm = ChatGoogleGenerativeAI(
-            model=Settings.gemini['model'],
-            api_key=Settings.gemini['api_key'],
-            temperature=0.5 # Aumentamos um pouco a temperatura para ser mais criativo fora do escopo
-        )
-
-        # ALTERAÇÃO 2: Prompt Híbrido (Contexto + Conhecimento Geral)
-        prompt = PromptTemplate(
-            template="""
-            ### PAPEL
-            Você é o **Mentor Especialista da SharkDev**.
-            
-            ### FONTE DE DADOS
-            Abaixo estão trechos da nossa base de conhecimento interna.
-            
-            --- INÍCIO DO CONTEXTO SHARKDEV ---
-            {data}
-            --- FIM DO CONTEXTO SHARKDEV ---
-
-            ### DIRETRIZES DE RESPOSTA
-            1. **Prioridade:** Se a resposta estiver no [CONTEXTO SHARKDEV] acima, use-o como fonte principal e seja fiel a ele.
-            2. **Flexibilidade (Escopo Geral):** Se a pergunta do usuário **NÃO** estiver relacionada ao contexto (ex: dúvidas de Python, perguntas gerais, ajuda criativa), **NÃO** diga que não sabe. Use seu vasto conhecimento de IA para responder de forma útil e didática.
-            3. **Tom:** Profissional, encorajador e didático.
-            
-            ### ESTRUTURA DE RESPOSTA
-            - Se usou o contexto SharkDev: Adicione um emoji 🦈 no início.
-            - Se usou conhecimento geral: Responda naturalmente como um mentor experiente.
-            - Sempre formate com Markdown (negrito, listas) para facilitar a leitura.
-
-            ---
-            ### PERGUNTA DO USUÁRIO
-            {query}
-            """,
-            input_variables=["query", "data"]
-        )
-
-        chain = prompt | llm | parser
-
-        start = time.time()
-        # Passamos documents (pode estar vazio ou cheio)
-        resposta = chain.invoke({"query": pergunta, "data": documents})
-        end = time.time()
-
-        print(f"Tempo gasto pela LLM: {(end-start)}s")
-        return resposta
+        return documents
