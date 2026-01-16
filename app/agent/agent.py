@@ -2,7 +2,7 @@ import datetime
 import operator
 import logging
 import streamlit as st
-from typing import TypedDict, Annotated, Sequence, List
+from typing import TypedDict, Annotated, Sequence, List, Union
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
@@ -46,8 +46,6 @@ class AgentFactory:
         # 3. Seleção e Configuração do Modelo (LLM)
         self.llm = self._get_llm_instance(llm)
         
-        # Tenta vincular ferramentas (Function Calling).
-        # Modelos como Maritaca podem não suportar bind_tools nativamente ainda.
         try:
             self.llm_with_tools = self.llm.bind_tools(self.tools)
         except NotImplementedError:
@@ -121,11 +119,9 @@ class AgentFactory:
             messages = state["messages"]
             last_message = messages[-1]
             
-            # Se a LLM não chamou nenhuma ferramenta, encerra o ciclo
             if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
                 return "end"
             
-            # Se chamou ferramenta, continua para o nó de tools
             return "continue"
 
         def after_tools_router(state: AgentState):
@@ -172,22 +168,18 @@ class AgentFactory:
         return history
 
     def invoke(self, input_text: str, session_messages: List[dict], uploaded_files: List[dict] = None, user_credentials=None, user_infos=None):
-        # Log de entrada da função Invoke
         user_name = user_infos.get('user', 'Desconhecido') if user_infos else 'Desconhecido'
         qtd_arquivos = len(uploaded_files) if uploaded_files else 0
         logger.info(f"Agent.invoke iniciado. User: {user_name}, Input: '{input_text}', Arquivos: {qtd_arquivos}")
 
-        # 1. Configura Credenciais para Ferramentas do Google (Runtime)
         if user_credentials:
             self.create_event_tool.set_credentials(user_credentials)
             self.check_calendar_tool.set_credentials(user_credentials)
             self.check_email_tool.set_credentials(user_credentials)
             self.send_email_tool.set_credentials(user_credentials)
 
-        # 2. Reconstrói Histórico
         lc_messages = self._reconstruct_history(session_messages)
         
-        # 3. Prepara Conteúdo Atual (Multimodal)
         current_content = []
         if input_text: 
             current_content.append({"type": "text", "text": input_text})
@@ -205,24 +197,35 @@ class AgentFactory:
                     except Exception as img_err:
                         logger.warning(f"Erro ao processar imagem anexa: {img_err}")
 
-        # Informações de Contexto do Usuário
         if user_infos and 'email' in user_infos and 'user' in user_infos:
              current_content.append({"type": "text", "text": f"\nCONTEXTO DO USUÁRIO:\nNome: {user_infos['user']}\nE-mail: {user_infos['email']}"})
 
-        # Adiciona a mensagem atual ao histórico
         lc_messages.append(HumanMessage(content=current_content))
         
         try:
-            # Executa o Grafo
             logger.info("Invocando LangGraph...")
             result = self.graph.invoke({"messages": lc_messages})
             
             last_message = result["messages"][-1]
             content = last_message.content
             
+            # --- FIX: TRATAMENTO DE CONTEÚDO EM LISTA (Maritaca/Anthropic) ---
+            if isinstance(content, list):
+                # Extrai apenas o texto dos blocos
+                text_parts = []
+                for part in content:
+                    if isinstance(part, dict) and "text" in part:
+                        text_parts.append(part["text"])
+                    elif hasattr(part, "text"):
+                        text_parts.append(part.text)
+                    elif isinstance(part, str):
+                        text_parts.append(part)
+                content = "\n".join(text_parts)
+            # -----------------------------------------------------------------
+            
             if not content:
                 if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                     logger.info("Resposta vazia da LLM, mas com tool_calls pendentes (pode indicar fim de turno inesperado).")
+                     logger.info("Resposta vazia da LLM, mas com tool_calls pendentes.")
                      content = "🤔 Processando ferramentas..."
                 else:
                      logger.info("Resposta vazia da LLM e sem tool_calls.")
