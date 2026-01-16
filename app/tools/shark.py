@@ -1,10 +1,13 @@
 import time
+import logging
 from typing import List, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 from models.tools import SharkHelperInput
 from services.chroma import get_collection
 from utils.settings import WrappedSettings as Settings
+
+logger = logging.getLogger(__name__)
 
 class SharkHelper(BaseTool):
     name: str = "AjudaShark"
@@ -16,6 +19,9 @@ class SharkHelper(BaseTool):
     return_direct: bool = True
 
     def _run(self, pergunta: str, temas: List[str]) -> str:
+        # Log de entrada
+        logger.info(f"Tool SharkHelper iniciada. Params: pergunta='{pergunta}', temas={temas}")
+        
         start = time.time()
         try:
             # Garante que temas não seja None
@@ -32,14 +38,16 @@ class SharkHelper(BaseTool):
             flat_docs = [item for sublist in documents for item in sublist]
             
             if not flat_docs:
+                logger.info("RAG Shark: Nenhum documento encontrado.")
                 return "Não encontrei informações internas sobre esse assunto na base da SharkDev."
-                
+            
+            logger.info(f"RAG Shark: {len(flat_docs)} documentos recuperados.")
             return "\n\n---\n\n".join(flat_docs)
             
         except Exception as e:
-            print(f"Erro RAG Shark: {e}")
+            logger.error(f"Erro RAG Shark: {e}")
             return "Erro ao consultar base de conhecimento."
             
         finally:
             end = time.time()
-            print(f"⏱️ RAG Shark: {end-start:.2f}s")
+            logger.info(f"RAG Shark Tempo de execução: {end-start:.2f}s")

@@ -1,11 +1,14 @@
 import time
 import requests
+import logging
 from typing import Type
 from datetime import date, timedelta
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 from models.tools import ReadNewsInput
 from utils.settings import WrappedSettings as Settings
+
+logger = logging.getLogger(__name__)
 
 class ReadNews(BaseTool):
     name: str = "LerNoticias"
@@ -17,6 +20,9 @@ class ReadNews(BaseTool):
     return_direct: bool = False 
 
     def _run(self, qtde_noticias: int = 3, assuntos: str = "", pais: str = "br") -> str:
+        # Log de entrada
+        logger.info(f"Tool ReadNews iniciada. Params: qtde_noticias={qtde_noticias}, assuntos='{assuntos}', pais='{pais}'")
+
         # Configuração de Datas
         today = date.today()
         start_date = today - timedelta(days=2) 
@@ -29,7 +35,7 @@ class ReadNews(BaseTool):
         else:
             lista_temas = [t.strip() for t in assuntos.split(',')]
 
-        print(f"🔎 GNews: {lista_temas} ({pais})")
+        logger.info(f"GNews Search: Temas={lista_temas} País={pais}")
         
         resultados_finais = []
         seen_titles = set()
@@ -54,7 +60,7 @@ class ReadNews(BaseTool):
                 data = response.json()
                 
                 if 'articles' not in data:
-                    print(f"⚠️ GNews ({tema}): {data.get('errors', 'Sem dados')}")
+                    logger.warning(f"GNews ({tema}): {data.get('errors', 'Sem dados')}")
                     continue
 
                 tema_buffer = []
@@ -77,9 +83,10 @@ class ReadNews(BaseTool):
                 time.sleep(0.3) # Rate limit protection
                 
             except Exception as e:
-                print(f"Erro ao buscar {tema}: {e}")
+                logger.error(f"Erro ao buscar notícias sobre '{tema}': {e}")
 
         if not resultados_finais:
+            logger.info("Nenhuma notícia encontrada com os critérios fornecidos.")
             return "Não encontrei notícias recentes. Verifique a API Key ou os termos."
 
         return "\n".join(resultados_finais)

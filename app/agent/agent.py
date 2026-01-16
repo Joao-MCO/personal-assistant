@@ -1,5 +1,6 @@
 import datetime
 import operator
+import logging
 import streamlit as st
 from typing import TypedDict, Annotated, Sequence, List
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
@@ -16,20 +17,23 @@ from prompts.templates import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
 from tools.google_tools import CheckCalendar, CheckEmail, CreateEvent, SendEmail
 
+# Configuração do Logger
+logger = logging.getLogger(__name__)
+
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
 
 class AgentFactory:
     def __init__(self, llm="gemini"):
+        logger.info(f"Inicializando AgentFactory. Modelo solicitado: {llm}")
+        
         # 1. Ferramentas que precisam de credenciais do usuário (Runtime)
-        # Estas são instanciadas aqui para receberem as credenciais da sessão atual
         self.create_event_tool = CreateEvent()
         self.check_calendar_tool = CheckCalendar()
         self.check_email_tool = CheckEmail()
         self.send_email_tool = SendEmail()
         
         # 2. Ferramentas Globais (Manager) + Ferramentas de Sessão
-        # Filtramos do manager as tools que estamos criando manualmente acima para evitar duplicidade
         global_tools = [t for t in agent_tools if t.name not in ["CriarEvento", "ConsultarAgenda", "ConsultarEmail", "EnviarEmail"]]
         
         self.tools = global_tools + [
@@ -51,7 +55,6 @@ class AgentFactory:
             "Thursday": "Quinta-feira", "Friday": "Sexta-feira", "Saturday": "Sábado", "Sunday": "Domingo"
         }
         
-        # Formatação do System Prompt com dados atuais
         formatted_system_prompt = AGENT_SYSTEM_PROMPT.format(
             dia_hoje_pt=dias_pt.get(agora.strftime("%A"), ""),
             data_hoje=agora.strftime("%d/%m/%Y"),
@@ -71,27 +74,32 @@ class AgentFactory:
         """Centraliza a lógica de instanciação da LLM com tratamento de erros."""
         try:
             if model_name == "maritaca":
+                logger.info("Instanciando ChatMaritalk")
                 return ChatMaritalk(
                     api_key=Settings.maritaca["api_key"], 
                     model=Settings.maritaca["model"],
                     temperature=0.7
                 )
             elif model_name == "claude":
+                logger.info("Instanciando ChatAnthropic (Claude)")
                 return ChatAnthropic(
                     api_key=Settings.claude["api_key"], 
                     model=Settings.claude["model"],
                     temperature=0.7
                 )
             elif model_name == "gpt":
+                logger.info("Instanciando ChatOpenAI (GPT)")
                 return ChatOpenAI(
                     api_key=Settings.openai["api_key"], 
                     model=Settings.openai["model"],
                     temperature=0.7
                 )
             else:
-                # Fallback padrão: Google Gemini
+                logger.info("Instanciando Google Gemini (Default)")
                 if not Settings.gemini.get("api_key"):
-                    st.error("🚨 Erro Crítico: API Key do Gemini não encontrada.")
+                    msg = "Erro Crítico: API Key do Gemini não encontrada."
+                    logger.critical(msg)
+                    st.error(f"🚨 {msg}")
                     st.stop()
                     
                 return ChatGoogleGenerativeAI(
@@ -100,32 +108,28 @@ class AgentFactory:
                     temperature=0.4
                 )
         except Exception as e:
+            logger.error(f"Erro ao iniciar LLM ({model_name}): {e}", exc_info=True)
             st.error(f"Erro ao iniciar LLM ({model_name}): {e}")
             st.stop()
 
     def _create_graph(self):
         workflow = StateGraph(AgentState)
         
-        # Nó do Agente (LLM)
         def call_model(state: AgentState):
             messages = state["messages"]
             chain = self.prompt | self.llm_with_tools
             response = chain.invoke({"messages": messages})
             return {"messages": [response]}
         
-        # Lógica de Decisão (Router)
         def router_logic(state: AgentState):
             messages = state["messages"]
             last_message = messages[-1]
             
-            # Se a LLM não chamou nenhuma ferramenta, encerra o ciclo
             if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
                 return "end"
             
-            # Se chamou ferramenta, continua para o nó de tools
             return "continue"
 
-        # Lógica Pós-Ferramenta
         def after_tools_router(state: AgentState):
             messages = state["messages"]
             last_message = messages[-1]
@@ -133,9 +137,7 @@ class AgentFactory:
             if isinstance(last_message, ToolMessage):
                 if last_message.name in ["AjudaProgramacao", "DuvidasRPG"]:
                     return "end"
-                
                 return "agent"
-            
             return "agent"
         
         workflow.add_node("agent", call_model)
@@ -156,7 +158,6 @@ class AgentFactory:
         return workflow.compile()
 
     def _reconstruct_history(self, session_messages: List[dict]) -> List[BaseMessage]:
-        """Converte o histórico de dicionários do Streamlit para objetos LangChain"""
         history = []
         for msg in session_messages:
             if not isinstance(msg, dict): continue
@@ -173,6 +174,11 @@ class AgentFactory:
         return history
 
     def invoke(self, input_text: str, session_messages: List[dict], uploaded_files: List[dict] = None, user_credentials=None, user_infos=None):
+        # Log de entrada da função Invoke
+        user_name = user_infos.get('user', 'Desconhecido') if user_infos else 'Desconhecido'
+        qtd_arquivos = len(uploaded_files) if uploaded_files else 0
+        logger.info(f"Agent.invoke iniciado. User: {user_name}, Input: '{input_text}', Arquivos: {qtd_arquivos}")
+
         # 1. Configura Credenciais para Ferramentas do Google (Runtime)
         if user_credentials:
             self.create_event_tool.set_credentials(user_credentials)
@@ -189,18 +195,17 @@ class AgentFactory:
             current_content.append({"type": "text", "text": input_text})
             
         if uploaded_files:
-            # Aviso para o agente sobre arquivos (não joga todo o binário no prompt para economizar tokens)
             file_names = ", ".join([f.get("name", "arquivo") for f in uploaded_files]) if uploaded_files else "arquivos"
             current_content.append({"type": "text", "text": f"\n[SISTEMA]: O usuário anexou os seguintes arquivos: {file_names}. Se precisar analisá-los, peça detalhes."})
             
-            # Se tiver imagens, adiciona para visão
             for file in uploaded_files:
                 if file.get('mime', '').startswith('image/'):
                     try:
                         import base64
                         encoded = base64.b64encode(file['data']).decode('utf-8')
                         current_content.append({"type": "image_url", "image_url": {"url": f"data:{file['mime']};base64,{encoded}"}})
-                    except: pass
+                    except Exception as img_err:
+                        logger.warning(f"Erro ao processar imagem anexa: {img_err}")
 
         # Informações de Contexto do Usuário
         if user_infos and 'email' in user_infos and 'user' in user_infos:
@@ -211,18 +216,23 @@ class AgentFactory:
         
         try:
             # Executa o Grafo
+            logger.info("Invocando LangGraph...")
             result = self.graph.invoke({"messages": lc_messages})
+            
             last_message = result["messages"][-1]
             content = last_message.content
             
-            # Tratamento de resposta vazia ou Tool Calls pendentes
             if not content:
                 if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+                     logger.info("Resposta vazia da LLM, mas com tool_calls pendentes (pode indicar fim de turno inesperado).")
                      content = "🤔 Processando ferramentas..."
                 else:
+                     logger.info("Resposta vazia da LLM e sem tool_calls.")
                      content = "✅ Feito."
 
+            logger.info("Agent.invoke finalizado com sucesso.")
             return {"output": [{"role": "assistant", "content": str(content)}]}
 
         except Exception as e:
+            logger.error(f"Erro na execução do agente: {str(e)}", exc_info=True)
             return {"output": [{"role": "assistant", "content": f"Desculpe, ocorreu um erro interno no agente: {str(e)}"}]}

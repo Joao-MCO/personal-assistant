@@ -4,6 +4,9 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import os
 import uuid
 import math
+import logging
+
+logger = logging.getLogger(__name__)
 
 def create_embedding(collection:str):
     collection = get_collection(collection)
@@ -26,7 +29,9 @@ def create_embedding(collection:str):
                         "doc": path,
                         "page": i+1
                     }
-                    print(metadata)
+                    # PRINT REMOVIDO E SUBSTITUÍDO
+                    logger.info(f"Processando embedding: {metadata}")
+                    
                     page_id = f"{uuid.uuid4()}"
                     embed = embedding_func.embed_query(text)
                     ids.append(page_id)

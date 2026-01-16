@@ -29,15 +29,18 @@ class CreateEvent(BaseTool):
         self._user_credentials = creds
 
     def _run(self, meeting_date: dict, description: str, attendees: List[str] = None, meet_length: int = 30, timezone: str = "America/Sao_Paulo"):
+        logger.info(f"Tool CreateEvent iniciada. Params: meeting_date={meeting_date}, description='{description}', attendees={attendees}, length={meet_length}")
+        
         from services.google_services import get_service
         
-        if not self._user_credentials: return MSG_LOGIN
+        if not self._user_credentials: 
+            logger.warning("Tentativa de CriarEvento sem credenciais.")
+            return MSG_LOGIN
         service = get_service(self._user_credentials, "calendar")
         if not service: return "Erro técnico ao autenticar no Google Calendar."
 
         try:
             tz = ZoneInfo(timezone)
-            # Input agora é garantido como Dict pelo Pydantic, mas mantemos resiliência
             if isinstance(meeting_date, dict):
                 dt_start = datetime.datetime(
                     meeting_date["year"], meeting_date["month"], meeting_date["day"],
@@ -45,7 +48,7 @@ class CreateEvent(BaseTool):
                     tzinfo=tz
                 )
             else:
-                dt_start = meeting_date # Fallback
+                dt_start = meeting_date
 
             dt_end = dt_start + datetime.timedelta(minutes=meet_length)
 
@@ -60,8 +63,10 @@ class CreateEvent(BaseTool):
             if attendees: event["attendees"] = [{"email": e} for e in attendees]
 
             result = service.events().insert(calendarId="primary", body=event, conferenceDataVersion=1).execute()
+            logger.info(f"Evento criado com sucesso. Link: {result.get('htmlLink')}")
             return f"Evento criado com sucesso! {result.get('htmlLink')}"
         except Exception as e:
+            logger.error(f"Erro CreateEvent: {e}")
             return f"Erro ao criar evento: {e}"
 
 class CheckCalendar(BaseTool):
@@ -75,8 +80,12 @@ class CheckCalendar(BaseTool):
         self._user_credentials = creds
 
     def _run(self, email: str, start_date: dict, end_date: dict):
+        logger.info(f"Tool CheckCalendar iniciada. Params: email='{email}', start_date={start_date}, end_date={end_date}")
+        
         from services.google_services import get_service
-        if not self._user_credentials: return MSG_LOGIN
+        if not self._user_credentials: 
+            logger.warning("Tentativa de ConsultarAgenda sem credenciais.")
+            return MSG_LOGIN
         service = get_service(self._user_credentials, "calendar")
         if not service: return "Erro técnico ao autenticar."
 
@@ -89,7 +98,9 @@ class CheckCalendar(BaseTool):
 
             events = service.events().list(calendarId=email, timeMin=start_dt, timeMax=end_dt, singleEvents=True, orderBy="startTime").execute().get("items", [])
             
-            if not events: return "Nenhum compromisso encontrado nesse período."
+            if not events: 
+                logger.info("CheckCalendar: Nenhum evento encontrado.")
+                return "Nenhum compromisso encontrado nesse período."
             
             output = []
             for event in events:
@@ -98,6 +109,7 @@ class CheckCalendar(BaseTool):
                 output.append(f"- {when}: {event.get('summary', 'Sem título')}")
             return "\n".join(output)
         except Exception as e:
+            logger.error(f"Erro CheckCalendar: {e}")
             return f"Erro ao consultar agenda: {e}"
 
 class CheckEmail(BaseTool):
@@ -111,6 +123,8 @@ class CheckEmail(BaseTool):
         self._user_credentials = creds
     
     def _run(self, max_results: int = 5, query: str = None, data_inicio: str = None, data_fim: str = None):
+        logger.info(f"Tool CheckEmail iniciada. Params: max={max_results}, query='{query}', inicio={data_inicio}, fim={data_fim}")
+        
         from services.google_services import get_service
         from datetime import datetime, timedelta
 
@@ -122,7 +136,6 @@ class CheckEmail(BaseTool):
             if query: filtros.append(query)
             if data_inicio: filtros.append(f"after:{data_inicio}")
             if data_fim: 
-                # Ajuste para incluir o dia final
                 try:
                      d_fim = datetime.strptime(data_fim, "%Y/%m/%d") + timedelta(days=1)
                      filtros.append(f"before:{d_fim.strftime('%Y/%m/%d')}")
@@ -132,7 +145,9 @@ class CheckEmail(BaseTool):
             results = service.users().messages().list(userId='me', q=q_str, maxResults=max_results).execute()
             messages = results.get('messages', [])
             
-            if not messages: return "Nenhum e-mail encontrado."
+            if not messages: 
+                logger.info("CheckEmail: Nenhum e-mail encontrado.")
+                return "Nenhum e-mail encontrado."
 
             emails_completos = []
             for msg in messages:
@@ -145,6 +160,7 @@ class CheckEmail(BaseTool):
                 
             return "\n\n---\n\n".join(emails_completos)
         except Exception as e:
+            logger.error(f"Erro CheckEmail: {e}")
             return f"Erro ao ler emails: {e}"
 
     def _extract_body(self, payload):
@@ -158,7 +174,7 @@ class CheckEmail(BaseTool):
                 data = part.get('body', {}).get('data')
                 if data:
                     decoded = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-                    if part.get('mimeType') == 'text/plain': return decoded # Prioriza texto puro
+                    if part.get('mimeType') == 'text/plain': return decoded
                     if part.get('mimeType') == 'text/html': 
                         soup = BeautifulSoup(decoded, 'html.parser')
                         body_text = soup.get_text(separator='\n', strip=True)
@@ -175,6 +191,8 @@ class SendEmail(BaseTool):
         self._user_credentials = creds
     
     def _run(self, to: str, subject: str, body: str, body_type: str ='plain'):
+        logger.info(f"Tool SendEmail iniciada. Params: to='{to}', subject='{subject}', type='{body_type}'")
+        
         from services.google_services import get_service
         if not self._user_credentials: return "Usuário não logado."
         service = get_service(self._user_credentials, "gmail")
@@ -186,6 +204,8 @@ class SendEmail(BaseTool):
             msg.attach(MIMEText(body, body_type))
             raw = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
             service.users().messages().send(userId='me', body={'raw': raw}).execute()
+            logger.info("SendEmail: Email enviado com sucesso.")
             return "Email enviado com sucesso."
         except Exception as e:
+            logger.error(f"Erro SendEmail: {e}")
             return f"Erro ao enviar: {e}"

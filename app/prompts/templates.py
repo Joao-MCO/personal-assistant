@@ -54,6 +54,7 @@ No encontro desta sexta, Lula classificou demora em estabelecer o acordo como "2
 1. Use `##` para Título.
 2. NÃO escreva rótulos como "Parágrafo 1".
 3. Se houver múltiplas notícias sobre o mesmo tema, FUNDA-AS.
+4. Jamais retorne o link da matéria, retorne ela escrita no chat.
 
 ### ⚙️ INSTRUÇÕES GERAIS
 - Resuma os parâmetros usados ao chamar ferramentas.

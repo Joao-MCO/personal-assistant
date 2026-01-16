@@ -9,13 +9,17 @@ from utils.files import get_emails
 from interface.styles import apply_custom_styles
 from interface.render import render_header, render_chat_history, render_upload_warning
 from interface.state import init_session_state
-from utils.settings import WrappedSettings as Settings # ALTERAÇÃO: Usa o wrapper novo
+from utils.settings import WrappedSettings as Settings
 
 # Configurações para ambiente de desenvolvimento/cloud
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
-# Configuração de Logger
-logging.basicConfig(level=logging.INFO)
+# Configuração de Logger com formato detalhado (Hora e Lugar)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logging.getLogger('google_auth_oauthlib').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 

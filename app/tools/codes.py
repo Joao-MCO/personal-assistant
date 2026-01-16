@@ -1,4 +1,5 @@
 import time
+import logging
 from typing import Type
 from pydantic import BaseModel
 from langchain_core.tools import BaseTool
@@ -8,6 +9,8 @@ from langchain_core.output_parsers import StrOutputParser
 from models.tools import CodeHelperInput
 from utils.settings import WrappedSettings as Settings
 from prompts.templates import CODE_HELPER_PROMPT
+
+logger = logging.getLogger(__name__)
 
 class CodeHelper(BaseTool):
     name: str = "AjudaProgramacao"
@@ -30,10 +33,12 @@ class CodeHelper(BaseTool):
         self._chain = prompt | llm | StrOutputParser()
 
     def _run(self, pergunta: str) -> str:
+        logger.info(f"Tool CodeHelper iniciada. Params: pergunta='{pergunta}'")
         start = time.time()
         try:
             resposta = self._chain.invoke({"query": pergunta})
-            print(f"⏱️ CodeHelper: {time.time()-start:.2f}s")
+            logger.info(f"CodeHelper finalizado. Tempo: {time.time()-start:.2f}s")
             return resposta
         except Exception as e:
+            logger.error(f"Erro CodeHelper: {str(e)}")
             return f"Erro ao processar código: {str(e)}"

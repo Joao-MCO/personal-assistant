@@ -1,4 +1,5 @@
 import time
+import logging
 from typing import List, Type
 from langchain_core.tools import BaseTool
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -9,6 +10,8 @@ from models.tools import RPGQuestionInput
 from services.chroma import get_collection
 from utils.settings import WrappedSettings as Settings
 from prompts.templates import RPG_HELPER_PROMPT
+
+logger = logging.getLogger(__name__)
 
 class RPGQuestion(BaseTool):
     name: str = "DuvidasRPG"
@@ -32,6 +35,7 @@ class RPGQuestion(BaseTool):
         self._chain = prompt | llm | StrOutputParser()
 
     def _run(self, pergunta: str, temas: List[str] = []) -> str:
+        logger.info(f"Tool RPGQuestion iniciada. Params: pergunta='{pergunta}', temas={temas}")
         start = time.time()
         try:
             collection = get_collection("my_collection")
@@ -42,7 +46,8 @@ class RPGQuestion(BaseTool):
             
             # Geração
             resposta = self._chain.invoke({"query": pergunta, "data": docs_text})
-            print(f"⏱️ RPG Helper: {time.time()-start:.2f}s")
+            logger.info(f"RPGHelper finalizado. Tempo: {time.time()-start:.2f}s")
             return resposta
         except Exception as e:
+            logger.error(f"Erro RPGQuestion: {e}")
             return f"Erro ao consultar o oráculo: {e}"

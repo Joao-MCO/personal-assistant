@@ -1,4 +1,7 @@
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_emails(agent=False):
     try:
@@ -17,5 +20,5 @@ def get_news_countries():
         paises = dados.get("countries", [])
         return paises
     except json.JSONDecodeError as e:
-        print(f"Erro ao decodificar JSON: {e}")
+        logger.error(f"Erro ao decodificar JSON (utils/files.py): {e}")
         return []
