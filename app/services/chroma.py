@@ -1,8 +1,9 @@
 import chromadb
 from chromadb.utils.embedding_functions.google_embedding_function import GoogleGenerativeAiEmbeddingFunction
-from utils.settings import Settings
+from utils.settings import WrappedSettings as Settings
 
 def get_client():
+    # Agora 'Settings' é o wrapper, então Settings.chroma existe e é um dict
     client = chromadb.CloudClient(
             api_key=Settings.chroma['api_key'],
             tenant=Settings.chroma['tenant'],
