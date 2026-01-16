@@ -45,7 +45,17 @@ class AgentFactory:
 
         # 3. Seleção e Configuração do Modelo (LLM)
         self.llm = self._get_llm_instance(llm)
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
+        
+        # Tenta vincular ferramentas (Function Calling).
+        # Modelos como Maritaca podem não suportar bind_tools nativamente ainda.
+        try:
+            self.llm_with_tools = self.llm.bind_tools(self.tools)
+        except NotImplementedError:
+            logger.warning(f"⚠️ O modelo '{llm}' não suporta bind_tools nativamente. O agente funcionará apenas como CHAT (sem ferramentas).")
+            self.llm_with_tools = self.llm
+        except Exception as e:
+            logger.error(f"Erro ao vincular ferramentas: {e}")
+            self.llm_with_tools = self.llm
 
         # 4. Contexto Temporal e Dinâmico
         emails_str = get_emails(True)
@@ -125,9 +135,11 @@ class AgentFactory:
             messages = state["messages"]
             last_message = messages[-1]
             
+            # Se a LLM não chamou nenhuma ferramenta, encerra o ciclo
             if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
                 return "end"
             
+            # Se chamou ferramenta, continua para o nó de tools
             return "continue"
 
         def after_tools_router(state: AgentState):
