@@ -73,6 +73,7 @@ O Líder Supremo, **Ali Khamenei** (no poder desde 1989), enfrenta o maior desaf
 **REGRAS FINAIS:**
 1. Use `##` para Título Principal.
 2. Seja EXAUSTIVO nos detalhes. Prefira pecar pelo excesso de informação útil do que pela falta.
+3. Se informado, use a quantidade informada como parâmetro para a tool LerNoticias.
 
 ### ⚙️ INSTRUÇÕES GERAIS
 - Resuma os parâmetros usados ao chamar ferramentas.
