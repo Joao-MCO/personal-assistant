@@ -1,4 +1,5 @@
-from tools.google_tools import CheckEmail, CreateEvent, CheckCalendar, SendEmail
+from tools.google_tools import CreateEvent, CheckCalendar
+from tools.gmail import CheckEmail, SendEmail
 from tools.general import RPGQuestion
 from tools.news import ReadNews
 from tools.codes import CodeHelper

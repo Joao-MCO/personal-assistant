@@ -1,4 +1,6 @@
 import datetime
+import hashlib
+import json
 import operator
 import logging
 import streamlit as st
@@ -6,8 +8,6 @@ from typing import TypedDict, Annotated, Sequence, List, Union
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_community.chat_models import ChatMaritalk
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -15,7 +15,8 @@ from utils.files import get_emails
 from utils.settings import WrappedSettings as Settings
 from prompts.templates import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
-from tools.google_tools import CheckCalendar, CheckEmail, CreateEvent, SendEmail
+from tools.google_tools import CheckCalendar, CreateEvent
+from tools.gmail import CheckEmail, SendEmail
 
 # Configuração do Logger
 logger = logging.getLogger(__name__)
@@ -167,16 +168,56 @@ class AgentFactory:
                 history.append(AIMessage(content=content))
         return history
 
-    def invoke(self, input_text: str, session_messages: List[dict], uploaded_files: List[dict] = None, user_credentials=None, user_infos=None):
-        user_name = user_infos.get('user', 'Desconhecido') if user_infos else 'Desconhecido'
-        qtd_arquivos = len(uploaded_files) if uploaded_files else 0
-        logger.info(f"Agent.invoke iniciado. User: {user_name}, Input: '{input_text}', Arquivos: {qtd_arquivos}")
+    def _tool_cache_key(self, tool_name: str, args: dict) -> str:
+        payload = json.dumps(
+            {"tool": tool_name, "args": args},
+            sort_keys=True,
+            default=str
+        )
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    def _cached_tool_executor(self, tool):
+        original_run = tool._run
+
+        def wrapped_run(*args, **kwargs):
+            key = self._tool_cache_key(tool.name, kwargs)
+
+            with self._tool_cache_lock:
+                if key in self._tool_cache:
+                    logger.info(f"[CACHE HIT] Tool {tool.name}")
+                    return self._tool_cache[key]
+
+            result = original_run(*args, **kwargs)
+
+            with self._tool_cache_lock:
+                self._tool_cache[key] = result
+
+            return result
+
+        tool._run = wrapped_run
+
+    # ------------------------------------------------------------------
+
+    def invoke(
+        self,
+        input_text: str,
+        session_messages: List[dict],
+        uploaded_files: List[dict] = None,
+        user_credentials=None,
+        user_infos=None
+    ):
+        # 🔹 Limpa cache a cada execução do agente
+        self._tool_cache = {}
 
         if user_credentials:
-            self.create_event_tool.set_credentials(user_credentials)
-            self.check_calendar_tool.set_credentials(user_credentials)
-            self.check_email_tool.set_credentials(user_credentials)
-            self.send_email_tool.set_credentials(user_credentials)
+            for tool in [
+                self.create_event_tool,
+                self.check_calendar_tool,
+                self.check_email_tool,
+                self.send_email_tool
+            ]:
+                tool.set_credentials(user_credentials)
+                self._cached_tool_executor(tool)
 
         lc_messages = self._reconstruct_history(session_messages)
         
