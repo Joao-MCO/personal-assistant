@@ -6,6 +6,7 @@ from threading import Lock
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from googleapiclient.errors import HttpError
+from google_auth_httplib2 import AuthorizedHttp
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def _build_service(credentials, service_name, version):
     def factory():
         _safe_refresh(credentials)
         http = httplib2.Http(timeout=30)
-        authed_http = credentials.authorize(http)
+        authed_http = AuthorizedHttp(credentials, http=http)
         return build(
             service_name,
             version,
