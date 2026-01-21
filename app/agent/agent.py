@@ -17,6 +17,9 @@ from prompts.templates import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
 from tools.google_tools import CheckCalendar, CreateEvent
 from tools.gmail import CheckEmail, SendEmail
+from threading import Lock
+
+
 
 # Configuração do Logger
 logger = logging.getLogger(__name__)
@@ -33,6 +36,8 @@ class AgentFactory:
         self.check_calendar_tool = CheckCalendar()
         self.check_email_tool = CheckEmail()
         self.send_email_tool = SendEmail()
+        self._tool_cache = {}
+        self._tool_cache_lock = Lock()
         
         # 2. Ferramentas Globais (Manager) + Ferramentas de Sessão
         global_tools = [t for t in agent_tools if t.name not in ["CriarEvento", "ConsultarAgenda", "ConsultarEmail", "EnviarEmail"]]
