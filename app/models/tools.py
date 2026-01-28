@@ -129,3 +129,12 @@ class CreateEventInput(BaseModel):
         default="America/Sao_Paulo", 
         description="Fuso horário do evento."
     )
+class WebSearchInput(BaseModel):
+    query: str = Field(
+        ..., 
+        description="A pergunta, termo técnico ou erro para pesquisar na web."
+    )
+    max_results: int = Field(
+        default=5, 
+        description="Número de resultados para retornar (padrão: 5)."
+    )
