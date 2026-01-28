@@ -4,7 +4,7 @@ import json
 import operator
 import logging
 import streamlit as st
-from typing import TypedDict, Annotated, Sequence, List, Union
+from typing import TypedDict, Annotated, Sequence, List, Union, Dict, Any
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
@@ -13,34 +13,70 @@ from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from utils.files import get_emails
 from utils.settings import WrappedSettings as Settings
+from utils.tool_cache import ToolResultCache
+from agent.llm_factory import LLMFactory
 from prompts.templates import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
 from tools.google_tools import CheckCalendar, CreateEvent
 from tools.gmail import CheckEmail, SendEmail
+from services.google_auth import GoogleCredentialManager
 from threading import Lock
+import html
 
-
-
-# Configuração do Logger
 logger = logging.getLogger(__name__)
 
+
 class AgentState(TypedDict):
+    """Estado do agente com histórico de mensagens"""
     messages: Annotated[Sequence[BaseMessage], operator.add]
 
+
 class AgentFactory:
-    def __init__(self, llm="gemini"):
-        logger.info(f"Inicializando AgentFactory. Modelo solicitado: {llm}")
+    """
+    Factory para criar e gerenciar agente IA com LangGraph.
+    
+    Características:
+    - Suporte a múltiplos modelos LLM
+    - Cache inteligente com TTL
+    - Validação de credenciais
+    - Error handling robusto
+    - Rate limiting (delegado a main.py)
+    """
+    
+    def __init__(self, llm: str = "gemini"):
+        """
+        Inicializa AgentFactory
         
-        # 1. Ferramentas que precisam de credenciais do usuário (Runtime)
+        Args:
+            llm: Modelo LLM a usar ('gemini', 'gpt', etc)
+        
+        Raises:
+            ValueError: Se modelo inválido
+            RuntimeError: Se erro ao inicializar LLM
+        """
+        logger.info(f"Inicializando AgentFactory com modelo: {llm}")
+        
+        try:
+            # 1. Inicializar LLM com validação
+            self.llm = LLMFactory.create_llm(llm)
+        except (ValueError, RuntimeError) as e:
+            logger.error(f"Erro ao inicializar LLM: {e}")
+            raise
+        
+        # 2. Ferramentas que precisam de credenciais do usuário (Runtime)
         self.create_event_tool = CreateEvent()
         self.check_calendar_tool = CheckCalendar()
         self.check_email_tool = CheckEmail()
         self.send_email_tool = SendEmail()
-        self._tool_cache = {}
-        self._tool_cache_lock = Lock()
         
-        # 2. Ferramentas Globais (Manager) + Ferramentas de Sessão
-        global_tools = [t for t in agent_tools if t.name not in ["CriarEvento", "ConsultarAgenda", "ConsultarEmail", "EnviarEmail"]]
+        # 3. Ferramentas Globais + Ferramentas de Sessão
+        global_tools = [
+            t for t in agent_tools
+            if t.name not in [
+                "CriarEvento", "ConsultarAgenda",
+                "ConsultarEmail", "EnviarEmail"
+            ]
+        ]
         
         self.tools = global_tools + [
             self.create_event_tool, 
@@ -48,25 +84,46 @@ class AgentFactory:
             self.check_email_tool, 
             self.send_email_tool
         ]
-
-        # 3. Seleção e Configuração do Modelo (LLM)
-        self.llm = self._get_llm_instance(llm)
         
+        # Vincular ferramentas ao modelo
         try:
             self.llm_with_tools = self.llm.bind_tools(self.tools)
+            logger.info(f"✅ {len(self.tools)} ferramentas vinculadas ao LLM")
         except NotImplementedError:
-            logger.warning(f"⚠️ O modelo '{llm}' não suporta bind_tools nativamente. O agente funcionará apenas como CHAT (sem ferramentas).")
+            logger.warning(
+                f"⚠️ Modelo '{llm}' não suporta bind_tools nativamente. "
+                f"Agente funcionará apenas como CHAT."
+            )
             self.llm_with_tools = self.llm
         except Exception as e:
-            logger.error(f"Erro ao vincular ferramentas: {e}")
+            logger.error(f"Erro ao vincular ferramentas: {e}", exc_info=True)
             self.llm_with_tools = self.llm
+        
+        # 4. Cache inteligente com TTL
+        self.cache = ToolResultCache(default_ttl_minutes=10)
+        self.cache_lock = Lock()
+        
+        # 5. Contexto Temporal e Dinâmico
+        self._initialize_system_prompt()
+        
+        # 6. Criar grafo do agente
+        self.graph = self._create_graph()
+        
+        logger.info("✅ AgentFactory inicializado com sucesso")
 
-        # 4. Contexto Temporal e Dinâmico
-        emails_str = get_emails(True)
+    def _initialize_system_prompt(self) -> None:
+        """Inicializa prompt do sistema com contexto dinâmico"""
+        try:
+            emails_str = get_emails(True)
+        except Exception as e:
+            logger.warning(f"Não foi possível carregar emails: {e}")
+            emails_str = ""
+        
         agora = datetime.datetime.now()
         dias_pt = {
-            "Monday": "Segunda-feira", "Tuesday": "Terça-feira", "Wednesday": "Quarta-feira",
-            "Thursday": "Quinta-feira", "Friday": "Sexta-feira", "Saturday": "Sábado", "Sunday": "Domingo"
+            "Monday": "Segunda-feira", "Tuesday": "Terça-feira",
+            "Wednesday": "Quarta-feira", "Thursday": "Quinta-feira",
+            "Friday": "Sexta-feira", "Saturday": "Sábado", "Sunday": "Domingo"
         }
         
         formatted_system_prompt = AGENT_SYSTEM_PROMPT.format(
@@ -75,53 +132,25 @@ class AgentFactory:
             hora_agora=agora.strftime("%H:%M"),
             emails_str=emails_str
         )
-
+        
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", formatted_system_prompt),
             MessagesPlaceholder(variable_name="messages"),
         ])
-        
-        # 5. Criação do Grafo (LangGraph)
-        self.graph = self._create_graph()
 
-    def _get_llm_instance(self, model_name):
-        """Centraliza a lógica de instanciação da LLM com tratamento de erros."""
-        try:
-            if model_name == "gpt":
-                logger.info("Instanciando ChatOpenAI (GPT)")
-                return ChatOpenAI(
-                    api_key=Settings.openai["api_key"], 
-                    model=Settings.openai["model"],
-                    temperature=0.7
-                )
-            else:
-                logger.info("Instanciando Google Gemini (Default)")
-                if not Settings.gemini.get("api_key"):
-                    msg = "Erro Crítico: API Key do Gemini não encontrada."
-                    logger.critical(msg)
-                    st.error(f"🚨 {msg}")
-                    st.stop()
-                    
-                return ChatGoogleGenerativeAI(
-                    api_key=Settings.gemini["api_key"], 
-                    model=Settings.gemini["model"], 
-                    temperature=0.4
-                )
-        except Exception as e:
-            logger.error(f"Erro ao iniciar LLM ({model_name}): {e}", exc_info=True)
-            st.error(f"Erro ao iniciar LLM ({model_name}): {e}")
-            st.stop()
-
-    def _create_graph(self):
+    def _create_graph(self) -> Any:
+        """Cria grafo de execução do agente"""
         workflow = StateGraph(AgentState)
         
         def call_model(state: AgentState):
+            """Chama modelo LLM"""
             messages = state["messages"]
             chain = self.prompt | self.llm_with_tools
             response = chain.invoke({"messages": messages})
             return {"messages": [response]}
         
-        def router_logic(state: AgentState):
+        def router_logic(state: AgentState) -> str:
+            """Rota lógica para ferramentas ou fim"""
             messages = state["messages"]
             last_message = messages[-1]
             
@@ -129,12 +158,14 @@ class AgentFactory:
                 return "end"
             
             return "continue"
-
-        def after_tools_router(state: AgentState):
+        
+        def after_tools_router(state: AgentState) -> str:
+            """Rota lógica após execução de ferramentas"""
             messages = state["messages"]
             last_message = messages[-1]
             
             if isinstance(last_message, ToolMessage):
+                # Algumas ferramentas são finais
                 if last_message.name in ["AjudaProgramacao", "DuvidasRPG"]:
                     return "end"
                 return "agent"
@@ -155,109 +186,195 @@ class AgentFactory:
             "end": END
         })
         
+        logger.info("✅ Grafo do agente compilado")
         return workflow.compile()
 
-    def _reconstruct_history(self, session_messages: List[dict]) -> List[BaseMessage]:
+    def _reconstruct_history(self, session_messages: List[Dict[str, Any]]) -> List[BaseMessage]:
+        """
+        Reconstrói histórico de mensagens para LangChain
+        
+        Args:
+            session_messages: Histórico de mensagens da sessão Streamlit
+        
+        Returns:
+            Lista de mensagens BaseMessage
+        """
         history = []
+        
         for msg in session_messages:
-            if not isinstance(msg, dict): continue
+            if not isinstance(msg, dict):
+                continue
             
-            role = msg.get("role")
-            content = str(msg.get("content", ""))
+            role = msg.get("role", "").lower()
+            content = str(msg.get("content", "")).strip()
             
-            if not content: continue
+            if not content:
+                continue
             
-            if role == "user": 
-                history.append(HumanMessage(content=content))
-            elif role == "assistant": 
-                history.append(AIMessage(content=content))
+            try:
+                if role == "user":
+                    history.append(HumanMessage(content=content))
+                elif role == "assistant":
+                    history.append(AIMessage(content=content))
+            except Exception as e:
+                logger.warning(f"Erro ao reconstruir mensagem: {e}")
+                continue
+        
         return history
 
-    def _tool_cache_key(self, tool_name: str, args: dict) -> str:
-        payload = json.dumps(
-            {"tool": tool_name, "args": args},
-            sort_keys=True,
-            default=str
-        )
-        return hashlib.sha256(payload.encode()).hexdigest()
+    def _get_cached_result(self, tool_name: str, **kwargs) -> Any:
+        """Obtém resultado em cache se disponível"""
+        with self.cache_lock:
+            return self.cache.get(tool_name, **kwargs)
 
-    def _cached_tool_executor(self, tool):
-        original_run = tool._run
+    def _cache_result(self, tool_name: str, result: Any, ttl_minutes: int = None, **kwargs):
+        """Armazena resultado em cache"""
+        with self.cache_lock:
+            self.cache.set(tool_name, result, ttl_minutes=ttl_minutes, **kwargs)
 
-        def wrapped_run(*args, **kwargs):
-            key = self._tool_cache_key(tool.name, kwargs)
-
-            with self._tool_cache_lock:
-                if key in self._tool_cache:
-                    logger.info(f"[CACHE HIT] Tool {tool.name}")
-                    return self._tool_cache[key]
-
-            result = original_run(*args, **kwargs)
-
-            with self._tool_cache_lock:
-                self._tool_cache[key] = result
-
-            return result
-
-        tool._run = wrapped_run
-
-    # ------------------------------------------------------------------
+    def _add_user_context_safely(
+        self,
+        current_content: List[Dict[str, Any]],
+        user_infos: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Adiciona contexto do usuário de forma segura (anti-injection)
+        
+        Args:
+            current_content: Conteúdo atual da mensagem
+            user_infos: Informações do usuário
+        
+        Returns:
+            Conteúdo com contexto adicionado
+        """
+        try:
+            user_name = str(user_infos.get('user', 'Unknown'))[:100]
+            user_email = str(user_infos.get('email', ''))[:200]
+            
+            # Validar email básico
+            if '@' not in user_email:
+                user_email = ''
+            
+            # Usar HTML escape para prevenir injection
+            user_name_safe = html.escape(user_name)
+            user_email_safe = html.escape(user_email)
+            
+            # Adicionar contexto de forma estruturada
+            current_content.append({
+                "type": "text",
+                "text": f"[CONTEXTO USUÁRIO: Nome={user_name_safe}, Email={user_email_safe}]"
+            })
+            
+            return current_content
+        
+        except Exception as e:
+            logger.warning(f"Erro ao adicionar contexto do usuário: {e}")
+            return current_content
 
     def invoke(
         self,
         input_text: str,
-        session_messages: List[dict],
-        uploaded_files: List[dict] = None,
-        user_credentials=None,
-        user_infos=None
-    ):
-        # 🔹 Limpa cache a cada execução do agente
-        self._tool_cache = {}
-
-        if user_credentials:
-            for tool in [
-                self.create_event_tool,
-                self.check_calendar_tool,
-                self.check_email_tool,
-                self.send_email_tool
-            ]:
-                tool.set_credentials(user_credentials)
-                self._cached_tool_executor(tool)
-
-        lc_messages = self._reconstruct_history(session_messages)
+        session_messages: List[Dict[str, Any]],
+        uploaded_files: List[Dict[str, Any]] = None,
+        user_credentials: Any = None,
+        user_infos: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Invoca o agente com entrada do usuário
         
-        current_content = []
-        if input_text: 
-            current_content.append({"type": "text", "text": input_text})
-            
-        if uploaded_files:
-            file_names = ", ".join([f.get("name", "arquivo") for f in uploaded_files]) if uploaded_files else "arquivos"
-            current_content.append({"type": "text", "text": f"\n[SISTEMA]: O usuário anexou os seguintes arquivos: {file_names}. Se precisar analisá-los, peça detalhes."})
-            
-            for file in uploaded_files:
-                if file.get('mime', '').startswith('image/'):
-                    try:
-                        import base64
-                        encoded = base64.b64encode(file['data']).decode('utf-8')
-                        current_content.append({"type": "image_url", "image_url": {"url": f"data:{file['mime']};base64,{encoded}"}})
-                    except Exception as img_err:
-                        logger.warning(f"Erro ao processar imagem anexa: {img_err}")
-
-        if user_infos and 'email' in user_infos and 'user' in user_infos:
-             current_content.append({"type": "text", "text": f"\nCONTEXTO DO USUÁRIO:\nNome: {user_infos['user']}\nE-mail: {user_infos['email']}"})
-
-        lc_messages.append(HumanMessage(content=current_content))
+        Args:
+            input_text: Texto de entrada do usuário
+            session_messages: Histórico de mensagens
+            uploaded_files: Arquivos anexados
+            user_credentials: Credenciais OAuth do Google
+            user_infos: Informações do usuário
         
+        Returns:
+            Dict com saída do agente
+        
+        Raises:
+            RuntimeError: Se erro na execução
+        """
         try:
+            # 1. Configurar credenciais nas ferramentas
+            if user_credentials:
+                # Validar e refresh credenciais se necessário
+                if not GoogleCredentialManager.ensure_valid_credentials(user_credentials):
+                    logger.warning("Credenciais inválidas ou expiradas")
+                    return {
+                        "output": [{
+                            "role": "assistant",
+                            "content": "⚠️ Suas credenciais expiraram. Faça login novamente."
+                        }]
+                    }
+                
+                for tool in [
+                    self.create_event_tool,
+                    self.check_calendar_tool,
+                    self.check_email_tool,
+                    self.send_email_tool
+                ]:
+                    tool.set_credentials(user_credentials)
+                
+                logger.debug("✅ Credenciais configuradas nas ferramentas")
+            
+            # 2. Reconstruir histórico
+            lc_messages = self._reconstruct_history(session_messages)
+            
+            # 3. Preparar conteúdo da mensagem atual
+            current_content: List[Dict[str, Any]] = []
+            
+            if input_text:
+                current_content.append({
+                    "type": "text",
+                    "text": input_text
+                })
+            
+            if uploaded_files:
+                file_names = ", ".join(
+                    [f.get("name", "arquivo") for f in uploaded_files]
+                ) if uploaded_files else "arquivos"
+                
+                current_content.append({
+                    "type": "text",
+                    "text": f"\n[ARQUIVO]: Anexados: {file_names}"
+                })
+                
+                # Processar imagens
+                for file in uploaded_files:
+                    if file.get('mime', '').startswith('image/'):
+                        try:
+                            import base64
+                            encoded = base64.b64encode(file['data']).decode('utf-8')
+                            current_content.append({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{file['mime']};base64,{encoded}"
+                                }
+                            })
+                        except Exception as e:
+                            logger.warning(f"Erro ao processar imagem: {e}")
+            
+            # 4. Adicionar contexto do usuário (seguro)
+            if user_infos and 'email' in user_infos and 'user' in user_infos:
+                current_content = self._add_user_context_safely(
+                    current_content,
+                    user_infos
+                )
+            
+            # 5. Adicionar mensagem ao histórico
+            lc_messages.append(HumanMessage(content=current_content))
+            
+            # 6. Invocar agente
             logger.info("Invocando LangGraph...")
             result = self.graph.invoke({"messages": lc_messages})
             
+            # 7. Processar resposta
             last_message = result["messages"][-1]
             content = last_message.content
             
-            # --- FIX: TRATAMENTO DE CONTEÚDO EM LISTA (Maritaca/Anthropic) ---
+            # Tratar conteúdo em lista (alguns modelos retornam assim)
             if isinstance(content, list):
-                # Extrai apenas o texto dos blocos
                 text_parts = []
                 for part in content:
                     if isinstance(part, dict) and "text" in part:
@@ -267,19 +384,29 @@ class AgentFactory:
                     elif isinstance(part, str):
                         text_parts.append(part)
                 content = "\n".join(text_parts)
-            # -----------------------------------------------------------------
             
+            # Validar conteúdo
             if not content:
                 if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                     logger.info("Resposta vazia da LLM, mas com tool_calls pendentes.")
-                     content = "🤔 Processando ferramentas..."
+                    logger.debug("Resposta vazia mas com tool_calls")
+                    content = "🤔 Processando ferramentas..."
                 else:
-                     logger.info("Resposta vazia da LLM e sem tool_calls.")
-                     content = "✅ Feito."
-
-            logger.info("Agent.invoke finalizado com sucesso.")
-            return {"output": [{"role": "assistant", "content": str(content)}]}
-
+                    logger.debug("Resposta vazia da LLM")
+                    content = "✅ Feito."
+            
+            logger.info("✅ Agent.invoke finalizado com sucesso")
+            return {
+                "output": [{
+                    "role": "assistant",
+                    "content": str(content)
+                }]
+            }
+        
         except Exception as e:
             logger.error(f"Erro na execução do agente: {str(e)}", exc_info=True)
-            return {"output": [{"role": "assistant", "content": f"Desculpe, ocorreu um erro interno no agente: {str(e)}"}]}
+            return {
+                "output": [{
+                    "role": "assistant",
+                    "content": f"❌ Erro: {str(e)[:200]}"
+                }]
+            }
