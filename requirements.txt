@@ -25,3 +25,4 @@ google-api-python-client
 streamlit-google-auth
 beautifulsoup4
 ddgs
+duckduckgo-search
