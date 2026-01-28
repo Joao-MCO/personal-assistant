@@ -24,3 +24,4 @@ streamlit>=1.29.0
 google-api-python-client
 streamlit-google-auth
 beautifulsoup4
+ddgs

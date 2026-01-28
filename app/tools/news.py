@@ -5,6 +5,7 @@ from typing import Type
 from datetime import date, timedelta
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
+from duckduckgo_search import DDGS
 from models.tools import ReadNewsInput
 from utils.settings import WrappedSettings as Settings
 
@@ -13,17 +14,17 @@ logger = logging.getLogger(__name__)
 class ReadNews(BaseTool):
     name: str = "LerNoticias"
     description: str = """
-    Busca notícias atuais usando a API GNews.
-    O sistema itera sobre cada tema solicitado para garantir cobertura completa.
+    Busca notícias e atualizações recentes (Híbrido: GNews + Busca Web Recente).
+    Use para: Notícias gerais, Esportes (BID, contratações), Mercado e Lançamentos.
+    Aceita operadores de busca (ex: 'site:ge.globo.com').
     """
     args_schema: Type[BaseModel] = ReadNewsInput
     return_direct: bool = False 
 
     def _run(self, qtde_noticias: int = 3, assuntos: str = "", pais: str = "br") -> str:
-        # Log de entrada
-        logger.info(f"Tool ReadNews iniciada. Params: qtde_noticias={qtde_noticias}, assuntos='{assuntos}', pais='{pais}'")
+        logger.info(f"Tool ReadNews iniciada. Params: qtde={qtde_noticias}, assuntos='{assuntos}'")
 
-        # Configuração de Datas
+        # Configuração de Datas para GNews
         today = date.today()
         start_date = today - timedelta(days=2) 
         
@@ -35,58 +36,106 @@ class ReadNews(BaseTool):
         else:
             lista_temas = [t.strip() for t in assuntos.split(',')]
 
-        logger.info(f"GNews Search: Temas={lista_temas} País={pais}")
-        
         resultados_finais = []
         seen_titles = set()
+        
+        # Mapeamento de região para o DuckDuckGo (ex: 'br-pt' para resultados do Brasil)
+        ddg_region_map = {"br": "br-pt", "us": "us-en", "pt": "pt-pt"}
+        ddg_region = ddg_region_map.get(pais, "wt-wt")
 
         for tema in lista_temas:
-            try:
-                # Decide endpoint
-                endpoint = "top-headlines" if tema in topicos_padrao else "search"
-                q_param = f"category={tema}" if endpoint == "top-headlines" else f"q={tema}"
-                
-                url = (
-                    f"https://gnews.io/api/v4/{endpoint}?{q_param}"
-                    f"&max={qtde_noticias}&country={pais}"
-                    f"&from={start_date}T00:00:00Z&to={today}T23:59:59Z"
-                    f"&apikey={Settings.gnews_api_key}"
-                )
-                
-                if endpoint == "search":
-                    url += "&sortBy=publishedAt"
+            tema_buffer = []
+            
+            # --- 1. Tenta GNews (Apenas para temas genéricos/manchetes) ---
+            # Se a busca contiver "site:" ou for muito específica, pule o GNews pois ele falhará.
+            use_gnews = True
+            if "site:" in tema or "BID" in tema.upper():
+                use_gnews = False
 
-                response = requests.get(url)
-                data = response.json()
-                
-                if 'articles' not in data:
-                    logger.warning(f"GNews ({tema}): {data.get('errors', 'Sem dados')}")
-                    continue
-
-                tema_buffer = []
-                for article in data['articles']:
-                    title = article.get('title')
-                    if title in seen_titles: continue 
-                    seen_titles.add(title)
-
-                    desc = article.get('description', '')
-                    source = article.get('source', {}).get('name')
-                    pub_date = article.get('publishedAt', '')[:10]
-                    url_news = article.get('url', '')
+            if use_gnews and Settings.gnews_api_key:
+                try:
+                    endpoint = "top-headlines" if tema in topicos_padrao else "search"
+                    q_param = f"category={tema}" if endpoint == "top-headlines" else f"q={tema}"
                     
-                    tema_buffer.append(f"- [{pub_date}] {title}\n  Fonte: {source}\n  Resumo: {desc}\n  Link: {url_news}")
+                    url = (
+                        f"https://gnews.io/api/v4/{endpoint}?{q_param}"
+                        f"&max={qtde_noticias}&country={pais}"
+                        f"&from={start_date}T00:00:00Z&to={today}T23:59:59Z"
+                        f"&apikey={Settings.gnews_api_key}"
+                    )
+                    if endpoint == "search": url += "&sortBy=publishedAt"
 
-                if tema_buffer:
-                    resultados_finais.append(f"\n--- TEMA: {tema.upper()} ---")
-                    resultados_finais.extend(tema_buffer)
+                    response = requests.get(url, timeout=4)
+                    data = response.json()
+                    if 'articles' in data:
+                        for article in data['articles']:
+                            self._process_article(article, seen_titles, tema_buffer, "GNews")
+                except Exception as e:
+                    logger.warning(f"GNews ignorado/falhou para '{tema}': {e}")
 
-                time.sleep(0.3) # Rate limit protection
+            # --- 2. Tenta DuckDuckGo TEXT Search (Com filtro de tempo) ---
+            # Aqui está o segredo: usamos .text() em vez de .news()
+            # timelimit='w' = última semana (garante frescor, mas pega indexação do site)
+            # timelimit='d' = último dia (pode ser muito restritivo se a notícia for de ontem à noite)
+            
+            if len(tema_buffer) < qtde_noticias:
+                missing = qtde_noticias - len(tema_buffer)
+                logger.info(f"Buscando '{tema}' no DuckDuckGo (Web Recente)...")
                 
-            except Exception as e:
-                logger.error(f"Erro ao buscar notícias sobre '{tema}': {e}")
+                try:
+                    with DDGS() as ddgs:
+                        # .text permite operadores como site: e filetype:
+                        ddg_results = list(ddgs.text(
+                            keywords=tema, 
+                            region=ddg_region, 
+                            safesearch='off', 
+                            timelimit='w', # <--- O PULO DO GATO: Filtra resultados da última semana
+                            max_results=missing + 3
+                        ))
+                        
+                        for res in ddg_results:
+                            # Normaliza para o formato de notícia
+                            article_std = {
+                                'title': res.get('title'),
+                                'description': res.get('body'),
+                                'source': {'name': 'Web Search'}, # DDG Text não retorna 'source' estruturado
+                                'publishedAt': 'Semana Recente', 
+                                'url': res.get('href')
+                            }
+                            self._process_article(article_std, seen_titles, tema_buffer, "WebRecente")
+                            
+                            if len(tema_buffer) >= qtde_noticias:
+                                break
+                except Exception as e:
+                    logger.error(f"DDG Web Recente falhou: {e}")
+
+            if tema_buffer:
+                resultados_finais.append(f"\n--- TEMA: {tema.upper()} ---")
+                resultados_finais.extend(tema_buffer)
+            
+            time.sleep(0.5)
 
         if not resultados_finais:
-            logger.info("Nenhuma notícia encontrada com os critérios fornecidos.")
-            return "Não encontrei notícias recentes. Verifique a API Key ou os termos."
+            return "Não encontrei informações recentes. Tente refinar a busca."
 
         return "\n".join(resultados_finais)
+
+    def _process_article(self, article, seen_titles, buffer, source_engine):
+        title = article.get('title')
+        if not title: return
+        
+        # Deduplicação simples
+        if title in seen_titles: return
+        seen_titles.add(title)
+
+        desc = article.get('description', 'Ver link.')
+        source = article.get('source', {}).get('name', 'Fonte Web')
+        pub_date = article.get('publishedAt', '')[:10]
+        url = article.get('url', '')
+
+        buffer.append(
+            f"- {title}\n"
+            f"  Fonte: {source} ({source_engine}) | Data: {pub_date}\n"
+            f"  Resumo: {desc}\n"
+            f"  Link: {url}"
+        )
