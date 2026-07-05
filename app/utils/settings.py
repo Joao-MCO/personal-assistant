@@ -47,19 +47,35 @@ class SettingsConfig(BaseSettings):
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     AUTH_COOKIE_SECRET: str = "change_me_in_production"
-    AUTH_REDIRECT_URI: str = "http://localhost:8501"
-    
-    # ===========================
-    # NEWS API
-    # ===========================
-    
-    GNEWS_API_KEY: Optional[str] = None
+    # Antes apontava pra porta padrão do Streamlit (8501). Agora é o endpoint de
+    # callback da própria API (ver app/api/auth.py). Ajuste para o domínio real
+    # em produção e cadastre o mesmo valor no Google Cloud Console.
+    AUTH_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
     
     # ===========================
     # SECURITY & ENCRYPTION
     # ===========================
     
     ENCRYPTION_KEY: Optional[str] = None
+    
+    # Chave simples para proteger os endpoints da API (header X-API-Key).
+    # Se ficar vazia, a verificação é desabilitada (conveniente em dev local,
+    # mas defina um valor em produção).
+    API_KEY: Optional[str] = None
+    
+    # ===========================
+    # SESSÕES DE CONVERSA (API)
+    # ===========================
+    
+    # Sessões em memória expiram após esse tempo de inatividade.
+    SESSION_TTL_MINUTES: int = 120
+    
+    # Reservado para uma futura migração do armazenamento de sessão de memória
+    # para Redis (múltiplas instâncias / persistência). Não é usado ainda.
+    REDIS_HOST: Optional[str] = None
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_PASSWORD: Optional[str] = None
     
     # ===========================
     # APP CONFIGURATION
@@ -86,40 +102,13 @@ class SettingsConfig(BaseSettings):
 
 def load_settings() -> SettingsConfig:
     """
-    Carrega configurações priorizando st.secrets para compatibilidade com Streamlit Cloud
-    
-    Ordem de prioridade:
-    1. Streamlit Secrets (st.secrets) - Streamlit Cloud
-    2. Variáveis de ambiente (.env) - Desenvolvimento local
-    3. Valores padrão
+    Carrega configurações a partir de variáveis de ambiente / arquivo .env.
     
     Returns:
         SettingsConfig: Instância com configurações carregadas
     """
-    # 1. Carregar do .env primeiro via Pydantic
     settings = SettingsConfig()
     logger.debug("✅ Configurações carregadas de .env")
-    
-    # 2. Sobrescrever com st.secrets se disponível (Streamlit Cloud)
-    try:
-        import streamlit as st
-        
-        if hasattr(st, 'secrets') and st.secrets:
-            logger.debug("Sobrescrevendo com st.secrets (Streamlit Cloud)")
-            
-            for field in settings.model_fields:
-                # Procura case insensitive nos secrets
-                for secret_key, secret_val in st.secrets.items():
-                    if secret_key.upper() == field.upper():
-                        if secret_val:  # Só sobrescrever se não vazio
-                            setattr(settings, field, secret_val)
-                            logger.debug(f"✅ {field} carregado de st.secrets")
-                        break
-    
-    except (ImportError, FileNotFoundError, Exception) as e:
-        # Streamlit não disponível ou secrets.toml não existe
-        logger.debug(f"st.secrets não disponível: {e}")
-    
     return settings
 
 
@@ -252,9 +241,14 @@ class AppSettingsWrapper:
         }
     
     @property
-    def gnews_api_key(self) -> Optional[str]:
-        """API Key do Google News"""
-        return Settings.GNEWS_API_KEY
+    def api_key(self) -> Optional[str]:
+        """Chave para proteção dos endpoints da API (header X-API-Key)"""
+        return Settings.API_KEY
+    
+    @property
+    def session_ttl_minutes(self) -> int:
+        """Minutos de inatividade até uma sessão de conversa expirar"""
+        return Settings.SESSION_TTL_MINUTES
     
     @property
     def orchestrator(self) -> str:

@@ -3,25 +3,31 @@ import logging
 from typing import Dict, Type, Any, Optional
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
+from utils.settings import WrappedSettings as Settings
 
 logger = logging.getLogger(__name__)
 
 
-# Configuração centralizada de modelos LLM
+# Configuração centralizada de modelos LLM.
+# O nome do modelo agora vem de Settings (GEMINI_MODEL / OPENAI_MODEL / CLAUDE_MODEL
+# no .env), que antes era ignorado aqui — o nome ficava hardcoded e mudar a
+# variável de ambiente não tinha nenhum efeito. Os valores default abaixo em
+# Settings (utils/settings.py) são os mesmos que já estavam hardcoded, então
+# nada muda para quem não configurou essas variáveis explicitamente.
 MODEL_CONFIG: Dict[str, Dict[str, Any]] = {
     "gemini": {
         "class": ChatGoogleGenerativeAI,
-        "model": "gemini-2.0-flash",
+        "model": Settings.gemini["model"],
         "env_key": "GEMINI_API_KEY",
         "temperature": 0.4,
-        "description": "Google Gemini 2.0 Flash (recomendado)"
+        "description": "Google Gemini (via GEMINI_MODEL)"
     },
     "gpt": {
         "class": ChatOpenAI,
-        "model": "gpt-4-turbo",
+        "model": Settings.openai["model"],
         "env_key": "OPENAI_API_KEY",
         "temperature": 0.7,
-        "description": "OpenAI GPT-4 Turbo"
+        "description": "OpenAI GPT (via OPENAI_MODEL)"
     },
 }
 
@@ -30,10 +36,10 @@ try:
     from langchain_anthropic import ChatAnthropic
     MODEL_CONFIG["claude"] = {
         "class": ChatAnthropic,
-        "model": "claude-3-5-sonnet-20241022",
+        "model": Settings.claude["model"],
         "env_key": "CLAUDE_API_KEY",
         "temperature": 0.4,
-        "description": "Anthropic Claude 3.5 Sonnet"
+        "description": "Anthropic Claude (via CLAUDE_MODEL)"
     }
 except ImportError:
     logger.debug("Claude não disponível (langchain_anthropic não instalado)")

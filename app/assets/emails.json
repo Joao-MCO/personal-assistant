@@ -1,126 +1,147 @@
 [
   {
-    "nome": "João Marcos Cardoso - SharkDev",
-    "email": "joao.cardoso@sharkdev.com.br"
+    "nome": "René Gonçalves",
+    "email": "rene@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Paulo Moreira - SharkDev",
-    "email": "paulo.moreira@sharkdev.com.br"
-  },
-  {
-    "nome": "Márcio Henrique SharkDev",
-    "email": "marciohsilva@sharkdev.com.br"
-  },
-  {
-    "nome": "Gabriel Valias - SharkDev",
-    "email": "gabriel.valias@sharkdev.com.br"
-  },
-  {
-    "nome": "Priscila Murarolli - SharkDev",
-    "email": "priscila@sharkdev.com.br"
-  },
-  {
-    "nome": "Heverton Gonçalves - SharkDev",
-    "email": "heverton.goncalves@sharkdev.com.br"
-  },
-  {
-    "nome": "Frederico Maihub - SharkDev",
-    "email": "frederico.maihub@sharkdev.com.br"
-  },
-  {
-    "nome": "João Batista Martins - SharkDev",
-    "email": "joao.martins@sharkdev.com.br"
-  },
-  {
-    "nome": "Malu Ancântara - SharkDev",
-    "email": "malu.alcantara@sharkdev.com.br"
-  },
-  {
-    "nome": "Pâmela Scotini - SharkDev",
-    "email": "pamela@sharkdev.com.br"
-  },
-  {
-    "nome": "Anna Silva - SharkDev",
-    "email": "anna.silva@sharkdev.com.br"
-  },
-  {
-    "nome": "Karina Marques - SharkDev",
-    "email": "karina.marques@sharkdev.com.br"
+    "nome": "João Marcos Cardoso",
+    "email": "joaocardoso@sharkdev.com.br",
+    "role": []
   },
   {
     "nome": "Ítalo Rezende",
-    "email": "italo.rezende@sharkdev.com.br"
+    "email": "italorezende@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "João Farias - SharkDev",
-    "email": "joao.farias@sharkdev.com.br"
+    "nome": "Fabrício Souza",
+    "email": "fabriciosouza@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Mikaeli Sampaio - SharkDev",
-    "email": "mikaeli.sampaio@sharkdev.com.br"
+    "nome": "Guilherme Brito",
+    "email": "guilhermebrito@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "René Gonçalves - SharkDev",
-    "email": "rene@sharkdev.com.br"
+    "nome": "Márcio Henrique",
+    "email": "marciohsilva@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "José Lócio - SharkDev",
-    "email": "jose.locio@sharkdev.com.br"
+    "nome": "Natan Rodrigues",
+    "email": "natanrodrigues@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Breno Mendes - SharkDev",
-    "email": "breno.mendes@sharkdev.com.br"
+    "nome": "Malu Ancântara",
+    "email": "malualcantara@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Afonso Massunari - SharkDev",
-    "email": "afonso.massunari@sharkdev.com.br"
+    "nome": "Bianca Silva",
+    "email": "biancasilva@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Caique Duarte - SharkDev",
-    "email": "caique.duarte@sharkdev.com.br"
+    "nome": "Caio Gonçalves",
+    "email": "caiogoncalves@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "João Boconcelo - SharkDev",
-    "email": "joao.boconcelo@sharkdev.com.br"
+    "nome": "Heverton Gonçalves",
+    "email": "hevertongoncalves@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Weguiton Cunha - SharkDev",
-    "email": "weguiton.cunha@sharkdev.com.br"
+    "nome": "Priscila Murarolli",
+    "email": "priscila@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Cícera Ribeiro - SharkDev",
-    "email": "cicera.ribeiro@sharkdev.com.br"
+    "nome": "Vinicius Lambert",
+    "email": "viniciuslambert@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Douglas Melo - SharkDev",
-    "email": "douglas.melo@sharkdev.com.br"
+    "nome": "Gabriel Valias",
+    "email": "gabrielvalias@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Fabrício Souza - SharkDev",
-    "email": "fabricio.souza@sharkdev.com.br"
+    "nome": "Caique Duarte",
+    "email": "caiqueduarte@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Vinicius Lambert - SharkDev",
-    "email": "vinicius.lambert@sharkdev.com.br"
+    "nome": "Anna Silva",
+    "email": "annasilva@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Guilherme Brito - SharkDev",
-    "email": "guilherme.brito@sharkdev.com.br"
+    "nome": "João Batista Martins",
+    "email": "joaomartins@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Lucas Gouvêa - SharkDev",
-    "email": "lucas.gouvea@sharkdev.com.br"
+    "nome": "Karina Marques",
+    "email": "karinamarques@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Luiz Silva - SharkDev",
-    "email": "luiz.silva@sharkdev.com.br"
+    "nome": "Leandro Casado",
+    "email": "leandrocasado@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "Gabriel Melo - SharkDev",
-    "email": "gabriel.melo@sharkdev.com.br"
+    "nome": "Paulo Moreira",
+    "email": "paulomoreira@sharkdev.com.br",
+    "role": []
   },
   {
-    "nome": "João Marcos",
-    "email": "joaomco.oliveira@gmail.com"
+    "nome": "Jonatas Alves",
+    "email": "jonatasalves@sharkdev.com.br",
+    "role": []
+  },
+  {
+    "nome": "Pâmela Scotini",
+    "email": "pamela@sharkdev.com.br",
+    "role": []
+  },
+  {
+    "nome": "João Farias",
+    "email": "joaofarias@sharkdev.com.br",
+    "role": []
+  },
+  {
+    "nome": "Weguiton Cunha",
+    "email": "weguitoncunha@sharkdev.com.br",
+    "role": []
+  },
+  {
+    "nome": "Frederico Maihub",
+    "email": "fredericomaihub@sharkdev.com.br",
+    "role": []
+  },
+  {
+    "nome": "Douglas Melo",
+    "email": "douglasmelo@sharkdev.com.br",
+    "role": []
+  },
+  {
+    "nome": "Breno Mendes",
+    "email": "brenomendes@sharkdev.com.br",
+    "role": []
+  },
+  {
+    "nome": "Mikaeli Sampaio",
+    "email": "mikaelisampaio@sharkdev.com.br",
+    "role": []
+  },
+  {
+    "nome": "José Lócio",
+    "email": "joselocio@sharkdev.com.br",
+    "role": []
   }
 ]

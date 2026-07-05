@@ -1,11 +1,11 @@
 # 🦈 Cidinha - Assistente Virtual SharkDev
 
-**Cidinha** é a assistente virtual inteligente da **SharkDev**, projetada para auxiliar na produtividade, programação e entretenimento da equipa. Ela utiliza uma arquitetura de agentes baseada em grafos (**LangGraph**) para orquestrar diferentes modelos de IA e ferramentas externas.
+**Cidinha** é a assistente virtual inteligente da **SharkDev**, projetada para auxiliar na produtividade e no acesso a conhecimento interno da equipa. Ela utiliza uma arquitetura de agentes baseada em grafos (**LangGraph**) para orquestrar diferentes modelos de IA e ferramentas externas, exposta através de uma **API REST (FastAPI)**.
 
 <div align="center">
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
 
 ![Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=google%20gemini&logoColor=white)
@@ -25,29 +25,23 @@ A Cidinha atua como uma agente autónoma que seleciona a ferramenta correta para
 * **📧 E-mail:** Lê a caixa de entrada, filtra mensagens por data/assunto e envia e-mails.
 * **👥 Contactos:** Reconhece automaticamente os e-mails da equipa SharkDev para facilitar o envio.
 
-### 💻 Desenvolvimento
-* **🤖 Pair Programmer:** Utiliza o modelo **Claude 4** para gerar código, refatorar scripts e explicar conceitos de programação.
-* **🦈 Shark Helper:** Um mentor especializado para dúvidas internas sobre a SharkDev, Blip e bots, utilizando RAG (Retrieval-Augmented Generation).
-
-### 📰 Informação & Lazer
-* **🗞️ Notícias:** Busca as últimas notícias via API GNews e utiliza a **Maritaca AI** para gerar resumos em português.
-* **🐉 Mestre de RPG:** Responde a dúvidas sobre regras de D&D 5e consultando uma base de conhecimento vetorial.
+### 🦈 Conhecimento Interno
+* **Shark Helper:** Um mentor especializado para dúvidas internas sobre a SharkDev, Blip e bots, utilizando RAG (Retrieval-Augmented Generation) sobre uma base vetorial (ChromaDB).
 
 ### 👁️ Multimodalidade
-* Suporte para upload e análise de ficheiros (imagens e texto) diretamente no chat.
+* Suporte para upload e análise de ficheiros (imagens e texto) diretamente na conversa.
 
 ---
 
 ## 🛠️ Stack Tecnológica
 
-O projeto integra diversos LLMs para aproveitar o melhor de cada um:
-
 * **Orquestração:** [LangGraph](https://langchain-ai.github.io/langgraph/) (StateGraph).
-* **LLM Principais (Agente):** Google Gemini 3 Flash e GPT 5 Nano.
-* **LLM Coding:** Anthropic Claude 4 Haiku.
-* **LLM PT-BR:** Maritaca AI (Sabiazinho-4).
+* **API:** [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn.
+* **LLMs suportados:** Google Gemini, OpenAI GPT e Anthropic Claude (escolha configurável, ver abaixo).
 * **Vector DB:** ChromaDB com Google Generative AI Embeddings.
-* **Interface:** Streamlit com CSS personalizado.
+* **Autenticação Google:** OAuth 2.0 (Calendar + Gmail), fluxo completo no backend.
+
+> ℹ️ As variáveis `MARITACA_API_KEY`/`MARITACA_MODEL` continuam presentes em `utils/settings.py` mas **não estão** ligadas a nenhum modelo em `agent/llm_factory.py` — nunca chegaram a ser integradas. Fica registado aqui para não gerar confusão; se quiser usar a Maritaca como um dos LLMs disponíveis, é só adicionar uma entrada em `MODEL_CONFIG`, seguindo o mesmo padrão do Gemini/GPT/Claude.
 
 ---
 
@@ -63,10 +57,10 @@ pip install -r requirements.txt
 ```
 
 ### 2. Variáveis de Ambiente
-Crie um ficheiro .env na raiz ou configure os secrets do Streamlit com as seguintes chaves:
+Crie um ficheiro `.env` na raiz do projeto com as seguintes chaves:
 
 ```Ini, TOML
-ORCHESTRATOR_MODEL="gpt" | "gemini" | "claude" | "maritaca"
+ORCHESTRATOR_MODEL="gemini"  # "gemini" | "gpt" | "claude" — modelo padrão do agente
 
 # Modelos de IA
 GEMINI_API_KEY="sua_chave"
@@ -76,14 +70,8 @@ GEMINI_EMBEDDING_MODEL="models/embedding-001"
 CLAUDE_API_KEY="sua_chave"
 CLAUDE_MODEL="claude-haiku-4-5-20251001"
 
-MARITACA_API_KEY="sua_chave"
-MARITACA_MODEL="sabiazinho-4"
-
 OPENAI_MODEL="gpt-5-nano"
 OPENAI_API_KEY="sua_chave"
-
-# Ferramentas Externas
-GNEWS_API_KEY="sua_chave"
 
 # Banco de Dados Vetorial (RAG)
 CHROMA_API_KEY="sua_chave"
@@ -91,39 +79,70 @@ CHROMA_TENANT="default_tenant"
 CHROMA_DATABASE="default_database"
 CHROMA_HOST="seu_host_chroma"
 
-# Autenticação Google
+# Autenticação Google (fluxo OAuth completo, ver seção "Endpoints" abaixo)
 GOOGLE_CLIENT_ID="seu_client_id"
 GOOGLE_CLIENT_SECRET='{"web":{...}}' # JSON string ou caminho para ficheiro
-AUTH_REDIRECT_URI="http://localhost:8501"
+AUTH_REDIRECT_URI="http://localhost:8000/auth/google/callback"
 AUTH_COOKIE_SECRET="string_aleatoria"
 
-# Configurações
+# Proteção da própria API (header X-API-Key). Deixe vazio em dev local se quiser.
+API_KEY="uma_chave_forte_para_produção"
+
+# Sessões de conversa em memória
+SESSION_TTL_MINUTES="120"
+
+# Configurações do agente
 MAX_TOKENS="4000"
 TEMPERATURE="0.4"
 ```
 
 ### 3. Execução
-Inicie a aplicação Streamlit:
 
-```Bash
-streamlit run app/main.py
+A aplicação roda a partir de **dentro** da pasta `app/` (os imports internos do projeto são relativos a ela, o mesmo motivo pelo qual antes se rodava `streamlit run app/main.py`):
+
+```bash
+cd app
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+Com o servidor no ar, a documentação interativa (Swagger) fica disponível em **http://localhost:8000/docs** — é a forma mais rápida de testar os endpoints manualmente, sem precisar de um frontend (cobre o que antes era feito testando direto na interface do Streamlit).
+
+Em produção, prefira rodar por trás de um process manager (ex.: `uvicorn main:app --workers 4` supervisionado por systemd/Docker, ou `gunicorn -k uvicorn.workers.UvicornWorker`).
+
+---
+
+## 🔌 Endpoints principais
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `POST` | `/chat` | Envia uma mensagem para a Cidinha. Aceita `multipart/form-data` com campos `message`, `session_id` (opcional), `llm` (opcional) e `files` (opcional, um ou mais anexos). |
+| `GET` | `/chat/{session_id}/history` | Retorna o histórico completo de uma sessão. |
+| `GET` | `/auth/google/login` | Inicia o login Google (redireciona o navegador para a tela de consentimento). Aceita `session_id` opcional na query. |
+| `GET` | `/auth/google/callback` | Callback do Google — não é chamado manualmente. |
+| `GET` | `/auth/google/status` | Verifica se uma sessão está autenticada no Google. |
+| `POST` | `/auth/google/logout` | Remove as credenciais Google de uma sessão. |
+| `GET` | `/health` | Health check. |
+
+`/chat` e `/chat/{session_id}/history` exigem o header `X-API-Key` se `API_KEY` estiver configurada no `.env`. As rotas `/auth/google/*` são de acesso livre (fluxo de redirecionamento do navegador — ver comentário no topo de `app/api/auth.py` para o porquê).
+
+**Fluxo típico:** chame `/auth/google/login` num navegador (ou direcione o usuário para lá) para liberar Agenda/Gmail; guarde o `session_id` retornado no callback; use esse mesmo `session_id` em todas as chamadas a `/chat` para manter o contexto da conversa e o acesso ao Google.
+
+---
 
 ## 📂 Estrutura do Projeto
 ```Plaintext
 
 personal-assistant/
 ├── app/
-│   ├── agent/          # Lógica do Agente e Grafo
-│   ├── assets/         # Imagens e dados estáticos
-│   ├── interface/      # UI, Renderização e Estado
-│   ├── models/         # Definições Pydantic (Inputs das Tools)
-│   ├── services/       # Clientes de API (Google, Chroma)
-│   ├── tools/          # Ferramentas (News, Code, RPG, Shark, Google)
-│   ├── utils/          # Configurações e Embeddings
-│   └── main.py         # Ponto de entrada
-├── .devcontainer/      # Configuração Docker/Codespaces
-├── requirements.txt    # Dependências
+│   ├── agent/          # Lógica do Agente e Grafo (LangGraph)
+│   ├── api/             # Rotas da API (chat, auth)
+│   ├── assets/          # Dados estáticos (contactos internos)
+│   ├── models/          # Definições Pydantic (Inputs das Tools)
+│   ├── services/        # Clientes de API (Google, Chroma) e SessionStore
+│   ├── tools/           # Ferramentas (Shark, Google Calendar, Gmail)
+│   ├── utils/           # Configurações e Embeddings
+│   └── main.py          # Ponto de entrada (app FastAPI)
+├── requirements.txt      # Dependências
 └── README.md
 ```
 
