@@ -12,7 +12,7 @@ from utils.files import get_emails
 from utils.settings import WrappedSettings as Settings
 from utils.tool_cache import ToolResultCache
 from agent.llm_factory import LLMFactory
-from agent.templates import AGENT_SYSTEM_PROMPT
+from app.agent.prompt import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
 from tools.google_tools import CheckCalendar, CreateEvent
 from tools.gmail import CheckEmail, SendEmail

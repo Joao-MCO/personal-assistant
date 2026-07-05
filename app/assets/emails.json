@@ -2,146 +2,221 @@
   {
     "nome": "René Gonçalves",
     "email": "rene@sharkdev.com.br",
-    "role": []
+    "team": "SharkDev",
+    "role": ["owner"]
   },
   {
     "nome": "João Marcos Cardoso",
     "email": "joaocardoso@sharkdev.com.br",
-    "role": []
+    "team": "Blip Squad",
+    "role": [
+      "backend",
+      "ai",
+      "developer"
+    ]
   },
   {
     "nome": "Ítalo Rezende",
     "email": "italorezende@sharkdev.com.br",
-    "role": []
+    "team": "White Squad",
+    "role": [
+      "leader",
+      "frontend",
+      "backend"
+    ]
   },
   {
     "nome": "Fabrício Souza",
     "email": "fabriciosouza@sharkdev.com.br",
-    "role": []
+    "team": "Blip Squad",
+    "role": [
+      "developer",
+      "support"
+    ]
   },
   {
     "nome": "Guilherme Brito",
     "email": "guilhermebrito@sharkdev.com.br",
+    "team": "White Squad",
     "role": []
   },
   {
     "nome": "Márcio Henrique",
     "email": "marciohsilva@sharkdev.com.br",
-    "role": []
+    "team": "SharkDev",
+    "role": ["owner"]
   },
   {
     "nome": "Natan Rodrigues",
     "email": "natanrodrigues@sharkdev.com.br",
-    "role": []
-  },
-  {
-    "nome": "Malu Ancântara",
-    "email": "malualcantara@sharkdev.com.br",
-    "role": []
+    "team": "Blip Squad",
+    "role": [
+      "intern",
+      "support"
+    ]
   },
   {
     "nome": "Bianca Silva",
     "email": "biancasilva@sharkdev.com.br",
+    "team": "Business Squad",
     "role": []
   },
   {
     "nome": "Caio Gonçalves",
     "email": "caiogoncalves@sharkdev.com.br",
-    "role": []
+    "team":"Business Squad",
+    "role": [
+      "leader"
+    ]
   },
   {
     "nome": "Heverton Gonçalves",
     "email": "hevertongoncalves@sharkdev.com.br",
-    "role": []
+    "team":"Blip Squad",
+    "role": [
+      "support",
+      "leader"
+    ]
   },
   {
     "nome": "Priscila Murarolli",
     "email": "priscila@sharkdev.com.br",
-    "role": []
+    "team":"SharkDev",
+    "role": [
+      "manager"
+    ]
   },
   {
     "nome": "Vinicius Lambert",
     "email": "viniciuslambert@sharkdev.com.br",
+    "team": "White Squad",
     "role": []
   },
   {
     "nome": "Gabriel Valias",
     "email": "gabrielvalias@sharkdev.com.br",
-    "role": []
+    "team": "Blip Squad",
+    "role": [
+      "leader",
+      "manager"
+    ]
   },
   {
     "nome": "Caique Duarte",
     "email": "caiqueduarte@sharkdev.com.br",
-    "role": []
+    "team": "Business Squad",
+    "role": [
+      "salesman"
+    ]
   },
   {
     "nome": "Anna Silva",
     "email": "annasilva@sharkdev.com.br",
-    "role": []
+    "team":"Blip Squad",
+    "role": [
+      "developer"
+    ]
   },
   {
     "nome": "João Batista Martins",
     "email": "joaomartins@sharkdev.com.br",
-    "role": []
+    "team":"Blip Squad",
+    "role": [
+      "ux",
+      "leader"
+    ]
   },
   {
     "nome": "Karina Marques",
     "email": "karinamarques@sharkdev.com.br",
-    "role": []
+    "team": "Business Squad",
+    "role": [
+      "saleswoman"
+    ]
   },
   {
     "nome": "Leandro Casado",
     "email": "leandrocasado@sharkdev.com.br",
-    "role": []
+    "team": "Business Squad",
+    "role": [
+      "marketing"
+    ]
   },
   {
     "nome": "Paulo Moreira",
     "email": "paulomoreira@sharkdev.com.br",
-    "role": []
+    "team": "Blip Squad",
+    "role": [
+      "manager",
+      "leader"
+    ]
   },
   {
     "nome": "Jonatas Alves",
     "email": "jonatasalves@sharkdev.com.br",
-    "role": []
+    "team": "Blip Squad",
+    "role": [
+      "developer",
+      "support"
+    ]
+    
   },
   {
     "nome": "Pâmela Scotini",
     "email": "pamela@sharkdev.com.br",
-    "role": []
-  },
-  {
-    "nome": "João Farias",
-    "email": "joaofarias@sharkdev.com.br",
-    "role": []
+    "team": "SharkDev",
+    "role": [
+      "human resources",
+      "finances"
+    ]
   },
   {
     "nome": "Weguiton Cunha",
     "email": "weguitoncunha@sharkdev.com.br",
-    "role": []
+    "team":"Blip Squad",
+    "role": [
+      "ux"
+    ]
   },
   {
     "nome": "Frederico Maihub",
     "email": "fredericomaihub@sharkdev.com.br",
-    "role": []
+    "team":"Blip Squad",
+    "role": [
+      "developer",
+      "leader"
+    ]
   },
   {
     "nome": "Douglas Melo",
     "email": "douglasmelo@sharkdev.com.br",
-    "role": []
+    "team": "Blip Squad",
+    "role": [
+      "support"
+    ]
   },
   {
     "nome": "Breno Mendes",
     "email": "brenomendes@sharkdev.com.br",
-    "role": []
+    "team": "Blip Squad",
+    "role": [
+      "backend"
+    ]
   },
   {
     "nome": "Mikaeli Sampaio",
     "email": "mikaelisampaio@sharkdev.com.br",
-    "role": []
+    "team":"White Squad",
+    "role": [
+      "frontend"
+    ]
   },
   {
     "nome": "José Lócio",
     "email": "joselocio@sharkdev.com.br",
-    "role": []
+    "team":"Blip Squad",
+    "role": [
+      "developer"
+    ]
   }
 ]
