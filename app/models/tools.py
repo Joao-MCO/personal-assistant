@@ -1,34 +1,9 @@
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
-from utils.files import get_news_countries
-
-# Carrega países válidos ou usa fallback
-AVAILABLE_COUNTRIES = get_news_countries()
-paises_validos = [p['code'] for p in AVAILABLE_COUNTRIES] if AVAILABLE_COUNTRIES else ["br", "us"]
 
 # =========================================
-# 1. Ferramentas de Informação (News, RPG, Code, Shark)
+# 1. Ferramentas de Informação (Shark)
 # =========================================
-
-class ReadNewsInput(BaseModel):
-    qtde_noticias: int = Field(
-        default=3, 
-        description="Quantidade de notícias para buscar POR TEMA."
-    )
-    assuntos: str = Field(
-        ..., 
-        description="Lista de temas de interesse separados por vírgula (ex: 'tecnologia, mercado financeiro')."
-    )
-    pais: str = Field(
-        default="br", 
-        description=f"Sigla do país para busca. Opções válidas: {paises_validos}"
-    )
-
-class CodeHelperInput(BaseModel):
-    pergunta: str = Field(
-        ..., 
-        description="O código para análise, snippet de erro ou a pergunta técnica detalhada sobre programação."
-    )
 
 class SharkHelperInput(BaseModel):
     pergunta: str = Field(
@@ -39,20 +14,6 @@ class SharkHelperInput(BaseModel):
         default=[], 
         description="Lista de palavras-chave (tags) para auxiliar a busca no banco vetorial."
     )
-
-class RPGQuestionInput(BaseModel):
-    pergunta: str = Field(
-        ..., 
-        description="A pergunta do usuário sobre regras, lore ou criação de personagem em D&D 5e."
-    )
-    temas: List[str] = Field(
-        default=[], 
-        description="Lista de tópicos principais da pergunta para melhorar a busca no RAG (ex: ['mago', 'magia', 'nível 5'])."
-    )
-
-class GenericQuestionInput(BaseModel):
-    pergunta: str = Field(description="Pergunta genérica.")
-
 
 # =========================================
 # 2. Ferramentas de Produtividade (Google)
@@ -128,13 +89,4 @@ class CreateEventInput(BaseModel):
     timezone: str = Field(
         default="America/Sao_Paulo", 
         description="Fuso horário do evento."
-    )
-class WebSearchInput(BaseModel):
-    query: str = Field(
-        ..., 
-        description="A pergunta, termo técnico ou erro para pesquisar na web."
-    )
-    max_results: int = Field(
-        default=5, 
-        description="Número de resultados para retornar (padrão: 5)."
     )

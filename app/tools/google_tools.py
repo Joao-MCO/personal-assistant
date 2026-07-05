@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 MSG_LOGIN = (
     "Pra te mostrar sua agenda eu preciso que você esteja logado no Google Calendar.\n"
-    "Por favor, faça login pelo painel lateral e tente novamente."
+    "Acesse /auth/google/login para autenticar e tente novamente."
 )
 
 # -------------------------------------------------------------------

@@ -3,11 +3,8 @@ import hashlib
 import json
 import operator
 import logging
-import streamlit as st
 from typing import TypedDict, Annotated, Sequence, List, Union, Dict, Any
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -15,7 +12,7 @@ from utils.files import get_emails
 from utils.settings import WrappedSettings as Settings
 from utils.tool_cache import ToolResultCache
 from agent.llm_factory import LLMFactory
-from prompts.templates import AGENT_SYSTEM_PROMPT
+from app.agent.templates import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
 from tools.google_tools import CheckCalendar, CreateEvent
 from tools.gmail import CheckEmail, SendEmail
@@ -159,14 +156,22 @@ class AgentFactory:
             
             return "continue"
         
+        # Ferramentas cujo resultado deve ir DIRETO para o usuário, sem passar de
+        # novo pelo LLM (equivalente ao `return_direct` do LangChain, mas aplicado
+        # manualmente aqui porque o ToolNode do LangGraph não o lê automaticamente).
+        # Nenhuma ferramenta ativa hoje precisa disso — a antiga "AjudaProgramacao"
+        # (removida) e "DuvidasRPG" (de uma feature de RPG já removida) usavam.
+        # Se uma nova ferramenta já entregar a resposta final formatada (ex.: uma
+        # futura "RevisorDeCodigo"), adicione o nome dela aqui.
+        TOOLS_RETURN_DIRECT: List[str] = []
+
         def after_tools_router(state: AgentState) -> str:
             """Rota lógica após execução de ferramentas"""
             messages = state["messages"]
             last_message = messages[-1]
             
             if isinstance(last_message, ToolMessage):
-                # Algumas ferramentas são finais
-                if last_message.name in ["AjudaProgramacao", "DuvidasRPG"]:
+                if last_message.name in TOOLS_RETURN_DIRECT:
                     return "end"
                 return "agent"
             return "agent"
