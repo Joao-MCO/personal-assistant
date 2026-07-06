@@ -37,6 +37,7 @@ A Cidinha atua como uma agente autónoma que seleciona a ferramenta correta para
 
 * **Orquestração:** [LangGraph](https://langchain-ai.github.io/langgraph/) (StateGraph).
 * **API:** [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn.
+* **Banco de dados:** SQLAlchemy + Alembic (SQLite em desenvolvimento, Postgres em produção — troca só via `DATABASE_URL`).
 * **LLMs suportados:** Google Gemini, OpenAI GPT e Anthropic Claude (escolha configurável, ver abaixo).
 * **Vector DB:** ChromaDB com Google Generative AI Embeddings.
 * **Autenticação Google:** OAuth 2.0 (Calendar + Gmail), fluxo completo no backend.
@@ -62,6 +63,11 @@ Crie um ficheiro `.env` na raiz do projeto com as seguintes chaves:
 ```Ini, TOML
 ORCHESTRATOR_MODEL="gemini"  # "gemini" | "gpt" | "claude" — modelo padrão do agente
 
+# Banco de dados — SQLite por padrão (zero configuração pra desenvolver).
+# Em produção, aponte para o Postgres do Render (ou outro provedor):
+# "postgresql://usuario:senha@host:5432/banco"
+DATABASE_URL="sqlite:///./cidinha.db"
+
 # Modelos de IA
 GEMINI_API_KEY="sua_chave"
 GEMINI_MODEL="gemini-3-flash-preview"
@@ -85,10 +91,16 @@ GOOGLE_CLIENT_SECRET='{"web":{...}}' # JSON string ou caminho para ficheiro
 AUTH_REDIRECT_URI="http://localhost:8000/auth/google/callback"
 AUTH_COOKIE_SECRET="string_aleatoria"
 
-# Proteção da própria API (header X-API-Key). Deixe vazio em dev local se quiser.
+# Proteção de /chat (header X-API-Key). Se não houver nenhum cliente
+# cadastrado (ver seção "Banco de Dados" abaixo) e esta variável ficar vazia,
+# a verificação é desabilitada — conveniente em dev, defina em produção.
 API_KEY="uma_chave_forte_para_produção"
 
-# Sessões de conversa em memória
+# Protege os endpoints administrativos /admin/* (header X-Admin-Token).
+# Sem isso configurado, /admin/* fica desativado por completo (503).
+ADMIN_TOKEN="outra_chave_forte_só_para_administração"
+
+# Sessões de conversa — agora persistidas no banco (ver DATABASE_URL acima)
 SESSION_TTL_MINUTES="120"
 
 # Configurações do agente
@@ -111,6 +123,60 @@ Em produção, prefira rodar por trás de um process manager (ex.: `uvicorn main
 
 ---
 
+## 🗄️ Banco de Dados
+
+Na primeira subida, a aplicação cria automaticamente todas as tabelas (via `Base.metadata.create_all`, chamado no evento de `startup` do FastAPI) e roda duas seeds, ambas idempotentes:
+- **`employees`** é populada a partir de `app/assets/emails.json` — só na primeira vez; depois disso a tabela é a fonte da verdade e o JSON não é mais consultado em tempo de execução.
+- **`api_clients`** recebe um cliente `"legacy"` se você já tiver `API_KEY` configurada no `.env` — assim ninguém perde acesso ao migrar de uma chave única para o sistema multi-cliente.
+
+| Tabela | Para quê |
+|---|---|
+| `sessions` / `messages` | Histórico de conversa por `session_id` (antes: em memória, zerava a cada restart). |
+| `google_credentials` | Token OAuth do Google por sessão (antes: também em memória). |
+| `employees` | Contatos internos da SharkDev (antes: `emails.json` estático). |
+| `api_clients` | Clientes autorizados a chamar `/chat`, cada um com sua própria chave, revogável individualmente (antes: uma única `API_KEY`). |
+| `tool_calls` | Auditoria + analytics de cada chamada de ferramenta (Calendar, Gmail, Shark Helper...): parâmetros, resultado, sucesso/erro, duração. |
+| `knowledge_documents` | Controle de quais arquivos já foram indexados no Chroma pelo Shark Helper (`app/utils/embedding.py`) — os vetores continuam só no Chroma, isso é só o registro de auditoria de cima. |
+
+### Gerenciando funcionários e chaves de API
+
+Os endpoints `/admin/*` (protegidos por `ADMIN_TOKEN`, header `X-Admin-Token`) cobrem o que antes exigia editar `emails.json` ou o `.env` e fazer um novo deploy:
+
+```bash
+# Adicionar um funcionário
+curl -X POST http://localhost:8000/admin/employees \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"nome": "Nome Sobrenome", "email": "nome@sharkdev.com.br"}'
+
+# Emitir uma nova chave de API para um cliente/time específico
+curl -X POST http://localhost:8000/admin/api-clients \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Bot do Slack"}'
+# -> retorna {"id":.., "name":.., "api_key": "..."} — a chave só aparece aqui, guarde-a
+
+# Revogar uma chave (sem afetar outros clientes)
+curl -X DELETE http://localhost:8000/admin/api-clients/1 -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
+### Alterando o schema (Alembic)
+
+Depois da primeira subida (que já cria as tabelas), **mudanças de schema devem passar por migração**, não por editar `app/db/models.py` e confiar no `create_all` de novo — em especial com dado real em produção, `create_all` não sabe fazer `ALTER TABLE`. O fluxo:
+
+```bash
+# 1. Edite app/db/models.py (adicione uma coluna, uma tabela, etc.)
+# 2. Gere a migração automaticamente, a partir da raiz do projeto:
+alembic revision --autogenerate -m "descreva a mudança"
+# 3. Revise o arquivo gerado em migrations/versions/
+# 4. Aplique:
+alembic upgrade head
+```
+
+`migrations/env.py` já lê a mesma `DATABASE_URL` que a aplicação usa, então isso funciona igual em SQLite local e no Postgres de produção.
+
+---
+
 ## 🔌 Endpoints principais
 
 | Método | Rota | Descrição |
@@ -121,9 +187,11 @@ Em produção, prefira rodar por trás de um process manager (ex.: `uvicorn main
 | `GET` | `/auth/google/callback` | Callback do Google — não é chamado manualmente. |
 | `GET` | `/auth/google/status` | Verifica se uma sessão está autenticada no Google. |
 | `POST` | `/auth/google/logout` | Remove as credenciais Google de uma sessão. |
+| `GET` `POST` `DELETE` | `/admin/employees[/{id}]` | Lista, cria e desativa funcionários. Requer `X-Admin-Token`. |
+| `GET` `POST` `DELETE` | `/admin/api-clients[/{id}]` | Lista, cria e revoga chaves de API. Requer `X-Admin-Token`. |
 | `GET` | `/health` | Health check. |
 
-`/chat` e `/chat/{session_id}/history` exigem o header `X-API-Key` se `API_KEY` estiver configurada no `.env`. As rotas `/auth/google/*` são de acesso livre (fluxo de redirecionamento do navegador — ver comentário no topo de `app/api/auth.py` para o porquê).
+`/chat` e `/chat/{session_id}/history` exigem o header `X-API-Key` se houver algum cliente cadastrado em `api_clients` (ver seção "Banco de Dados"). As rotas `/auth/google/*` são de acesso livre (fluxo de redirecionamento do navegador — ver comentário no topo de `app/api/auth.py` para o porquê). As rotas `/admin/*` exigem `X-Admin-Token` e ficam desativadas (503) se `ADMIN_TOKEN` não estiver configurado.
 
 **Fluxo típico:** chame `/auth/google/login` num navegador (ou direcione o usuário para lá) para liberar Agenda/Gmail; guarde o `session_id` retornado no callback; use esse mesmo `session_id` em todas as chamadas a `/chat` para manter o contexto da conversa e o acesso ao Google.
 
@@ -135,13 +203,16 @@ Em produção, prefira rodar por trás de um process manager (ex.: `uvicorn main
 personal-assistant/
 ├── app/
 │   ├── agent/          # Lógica do Agente e Grafo (LangGraph)
-│   ├── api/             # Rotas da API (chat, auth)
-│   ├── assets/          # Dados estáticos (contactos internos)
+│   ├── api/             # Rotas da API (chat, auth, admin)
+│   ├── assets/          # Dados estáticos (fonte da seed inicial de employees)
+│   ├── db/              # Modelos SQLAlchemy, engine/sessão, seeds (base.py, models.py, seed.py)
 │   ├── models/          # Definições Pydantic (Inputs das Tools)
-│   ├── services/        # Clientes de API (Google, Chroma) e SessionStore
+│   ├── services/        # Clientes de API (Google, Chroma), SessionStore e callback de auditoria
 │   ├── tools/           # Ferramentas (Shark, Google Calendar, Gmail)
 │   ├── utils/           # Configurações e Embeddings
 │   └── main.py          # Ponto de entrada (app FastAPI)
+├── migrations/           # Migrações Alembic (schema do banco)
+├── alembic.ini
 ├── requirements.txt      # Dependências
 └── README.md
 ```

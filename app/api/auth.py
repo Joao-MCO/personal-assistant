@@ -19,16 +19,21 @@ tem como anexar um header customizado. A proteção real desse fluxo é o
 próprio `state` (amarrado à sessão) e o consentimento na tela do Google.
 """
 
+import hashlib
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 import requests
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
+from sqlalchemy.orm import Session as DBSession
 
 from api.schemas import GoogleStatusResponse
+from db.base import get_db
+from db.models import ApiClient
 from services.session_store import session_store
 from utils.files import get_emails
 from utils.settings import WrappedSettings as Settings
@@ -46,15 +51,37 @@ SCOPES = [
 ]
 
 
-async def verify_api_key(x_api_key: Optional[str] = Header(default=None, alias=API_KEY_HEADER)):
+async def verify_api_key(
+    x_api_key: Optional[str] = Header(default=None, alias=API_KEY_HEADER),
+    db: DBSession = Depends(get_db),
+):
     """
-    Dependency do FastAPI usada nas rotas de /chat.
-    Se API_KEY não estiver definida no .env, a verificação fica desabilitada
-    (conveniente em desenvolvimento local) — defina-a antes de expor a API.
+    Dependency do FastAPI usada nas rotas de /chat. Cada chave é guardada só
+    como hash (sha256) na tabela `api_clients` -- o texto puro só existe no
+    momento em que é gerado, em POST /admin/api-clients, e não é recuperável
+    depois disso.
+
+    Se a tabela estiver vazia (nenhum cliente cadastrado e nenhuma API_KEY
+    legada configurada no .env), a verificação fica desabilitada -- mesmo
+    comportamento "modo dev" que já existia antes desta migração para SQL.
     """
-    expected = Settings.api_key
-    if expected and x_api_key != expected:
-        raise HTTPException(status_code=401, detail="X-API-Key inválida ou ausente.")
+    if db.query(ApiClient).count() == 0:
+        return
+
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="X-API-Key ausente.")
+
+    key_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
+    client = (
+        db.query(ApiClient)
+        .filter(ApiClient.key_hash == key_hash, ApiClient.active == True)  # noqa: E712
+        .first()
+    )
+    if client is None:
+        raise HTTPException(status_code=401, detail="X-API-Key inválida, revogada ou ausente.")
+
+    client.last_used_at = datetime.now(timezone.utc)
+    db.commit()
 
 
 router = APIRouter(prefix="/auth/google", tags=["auth"])
