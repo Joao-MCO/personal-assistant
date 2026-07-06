@@ -3,20 +3,21 @@ import hashlib
 import json
 import operator
 import logging
-from typing import TypedDict, Annotated, Sequence, List, Union, Dict, Any
+from typing import TypedDict, Annotated, Sequence, List, Union, Dict, Any, Optional
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from utils.files import get_emails
-from utils.settings import WrappedSettings as Settings
+from settings import WrappedSettings as Settings
 from utils.tool_cache import ToolResultCache
 from agent.llm_factory import LLMFactory
-from agent.templates import AGENT_SYSTEM_PROMPT
+from prompts.templates import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
 from tools.google_tools import CheckCalendar, CreateEvent
 from tools.gmail import CheckEmail, SendEmail
 from services.google_auth import GoogleCredentialManager
+from services.audit_callback import SQLAuditCallbackHandler
 from threading import Lock
 import html
 
@@ -282,7 +283,8 @@ class AgentFactory:
         session_messages: List[Dict[str, Any]],
         uploaded_files: List[Dict[str, Any]] = None,
         user_credentials: Any = None,
-        user_infos: Dict[str, Any] = None
+        user_infos: Dict[str, Any] = None,
+        session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Invoca o agente com entrada do usuário
@@ -293,6 +295,9 @@ class AgentFactory:
             uploaded_files: Arquivos anexados
             user_credentials: Credenciais OAuth do Google
             user_infos: Informações do usuário
+            session_id: Id da sessão (usado só para marcar as linhas de
+                auditoria em `tool_calls` -- ver services/audit_callback.py).
+                Opcional: se omitido, a auditoria é gravada sem session_id.
         
         Returns:
             Dict com saída do agente
@@ -370,9 +375,13 @@ class AgentFactory:
             # 5. Adicionar mensagem ao histórico
             lc_messages.append(HumanMessage(content=current_content))
             
-            # 6. Invocar agente
+            # 6. Invocar agente (com callback de auditoria/analytics de tool_calls)
             logger.info("Invocando LangGraph...")
-            result = self.graph.invoke({"messages": lc_messages})
+            audit_callback = SQLAuditCallbackHandler(session_id=session_id)
+            result = self.graph.invoke(
+                {"messages": lc_messages},
+                config={"callbacks": [audit_callback]}
+            )
             
             # 7. Processar resposta
             last_message = result["messages"][-1]

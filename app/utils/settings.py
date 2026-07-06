@@ -63,6 +63,12 @@ class SettingsConfig(BaseSettings):
     # mas defina um valor em produção).
     API_KEY: Optional[str] = None
     
+    # Segredo separado para os endpoints administrativos (/admin/*), que
+    # gerenciam funcionários e chaves de outros clientes da API. Sem isso
+    # configurado, /admin/* fica desativado por completo (não desabilitado
+    # como o API_KEY — aqui o padrão seguro é "fechado por default").
+    ADMIN_TOKEN: Optional[str] = None
+    
     # ===========================
     # SESSÕES DE CONVERSA (API)
     # ===========================
@@ -76,6 +82,14 @@ class SettingsConfig(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
+    
+    # ===========================
+    # BANCO DE DADOS (SQL)
+    # ===========================
+    
+    # Default: SQLite local, zero configuração para desenvolver. Em produção,
+    # aponte para o Postgres do Render (ou outro): "postgresql://user:pass@host/db"
+    DATABASE_URL: str = "sqlite:///./cidinha.db"
     
     # ===========================
     # APP CONFIGURATION
@@ -244,6 +258,16 @@ class AppSettingsWrapper:
     def api_key(self) -> Optional[str]:
         """Chave para proteção dos endpoints da API (header X-API-Key)"""
         return Settings.API_KEY
+    
+    @property
+    def admin_token(self) -> Optional[str]:
+        """Segredo para os endpoints administrativos (header X-Admin-Token)"""
+        return Settings.ADMIN_TOKEN
+    
+    @property
+    def database_url(self) -> str:
+        """URL de conexão do banco de dados (SQLAlchemy)"""
+        return Settings.DATABASE_URL
     
     @property
     def session_ttl_minutes(self) -> int:

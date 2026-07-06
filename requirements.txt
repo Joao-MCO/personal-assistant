@@ -2,6 +2,11 @@ python-dotenv
 requests
 pydantic-settings
 
+# Banco de dados (SQL)
+sqlalchemy
+alembic
+psycopg2-binary
+
 # API
 fastapi
 uvicorn[standard]
