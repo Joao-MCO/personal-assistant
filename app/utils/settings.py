@@ -92,6 +92,16 @@ class SettingsConfig(BaseSettings):
     DATABASE_URL: str = "sqlite:///./cidinha.db"
     
     # ===========================
+    # GITHUB (GeradorDeStandup)
+    # ===========================
+    
+    # Personal Access Token com escopo de leitura ("repo" ou, se os repos
+    # forem públicos, "public_repo" já basta). Um único token de serviço,
+    # não OAuth por usuário -- uso interno de devs que já sabem gerar o seu.
+    GITHUB_TOKEN: Optional[str] = None
+    GITHUB_ORG: Optional[str] = None
+    
+    # ===========================
     # APP CONFIGURATION
     # ===========================
     
@@ -268,6 +278,16 @@ class AppSettingsWrapper:
     def database_url(self) -> str:
         """URL de conexão do banco de dados (SQLAlchemy)"""
         return Settings.DATABASE_URL
+    
+    @property
+    def github_token(self) -> Optional[str]:
+        """Token de acesso ao GitHub (GeradorDeStandup)"""
+        return Settings.GITHUB_TOKEN
+    
+    @property
+    def github_org(self) -> Optional[str]:
+        """Organização padrão no GitHub para busca de commits"""
+        return Settings.GITHUB_ORG
     
     @property
     def session_ttl_minutes(self) -> int:

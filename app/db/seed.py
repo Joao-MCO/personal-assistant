@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from db.models import ApiClient, Employee
 from utils.files import get_employees_from_json
-from settings import WrappedSettings as Settings
+from utils.settings import WrappedSettings as Settings
 
 logger = logging.getLogger(__name__)
 

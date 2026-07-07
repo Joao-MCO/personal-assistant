@@ -23,10 +23,30 @@ A Cidinha atua como uma agente autónoma que seleciona a ferramenta correta para
 ### 🏢 Produtividade (Google Workspace)
 * **📅 Agenda:** Consulta compromissos e cria novos eventos no Google Calendar.
 * **📧 E-mail:** Lê a caixa de entrada, filtra mensagens por data/assunto e envia e-mails.
+* **📁 Google Drive:** Busca atas de reunião e documentos já existentes no Drive (`BuscarNoDrive`).
 * **👥 Contactos:** Reconhece automaticamente os e-mails da equipa SharkDev para facilitar o envio.
 
 ### 🦈 Conhecimento Interno
 * **Shark Helper:** Um mentor especializado para dúvidas internas sobre a SharkDev, Blip e bots, utilizando RAG (Retrieval-Augmented Generation) sobre uma base vetorial (ChromaDB).
+* **RAG da Base de Código:** RAG sobre a documentação técnica/arquitetura dos repositórios (`RAGDaBaseDeCodigo`).
+* **Onboarding Guiado:** RAG sobre documentação de onboarding para quem está entrando na empresa (`OnboardingGuiado`).
+
+### 🧑‍💻 Engenharia de Código (especialistas em Claude)
+* **Revisor de Código:** Revisão de qualidade geral de um trecho/PR colado (`RevisorDeCodigo`).
+* **Gerador de Testes:** Gera testes unitários a partir de uma função (`GeradorDeTestes`).
+* **Diagnóstico de Erro:** Analisa um stack trace/log colado e sugere a causa e o fix (`DiagnosticoDeErro`).
+* **Gerador de Documentação:** Gera docstrings ou um README a partir do código (`GeradorDeDocumentacao`).
+* **Revisor de Segurança:** Aponta vulnerabilidades conhecidas (SQLi, XSS, segredos hardcoded) (`RevisorDeSeguranca`).
+
+### 🔁 Fluxo de Desenvolvimento
+* **Gerador de Commit Message:** Gera uma mensagem de commit (Conventional Commits) a partir de um diff (`GeradorDeCommitMessage`).
+* **Auditoria de Dependências:** Roda `pip-audit` de verdade contra um requirements.txt e resume os achados (`AuditoriaDeDependencias`).
+* **Gerador de Standup:** Resumo de standup **individual**, a partir dos commits reais do usuário no GitHub — não pede pra digitar o que fez (`GeradorDeStandup`).
+* **Tradutor Técnico:** Traduz texto técnico entre português e inglês (`TradutorTecnico`).
+
+### 📊 Monitoramento (sem LLM)
+* **Monitor de Custos LLM:** Agrega gasto/uso de tokens por modelo e por skill (`MonitorDeCustosLLM`).
+* **Health Check Agregado:** Verifica a saúde do banco, do Chroma e de quais credenciais de LLM estão configuradas (`HealthCheckAgregado`).
 
 ### 👁️ Multimodalidade
 * Suporte para upload e análise de ficheiros (imagens e texto) diretamente na conversa.
@@ -38,7 +58,7 @@ A Cidinha atua como uma agente autónoma que seleciona a ferramenta correta para
 * **Orquestração:** [LangGraph](https://langchain-ai.github.io/langgraph/) (StateGraph).
 * **API:** [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn.
 * **Banco de dados:** SQLAlchemy + Alembic (SQLite em desenvolvimento, Postgres em produção — troca só via `DATABASE_URL`).
-* **LLMs suportados:** Google Gemini, OpenAI GPT e Anthropic Claude (escolha configurável, ver abaixo).
+* **LLMs suportados:** Google Gemini, OpenAI GPT e Anthropic Claude. Estratégia de orquestração: o `ORCHESTRATOR_MODEL` (rápido/barato, hoje Gemini) decide qual ferramenta chamar; cada skill especialista (`RevisorDeCodigo`, `GeradorDeTestes`...) usa internamente o modelo mais adequado à própria tarefa (`MODEL_FAMILY` no topo de cada arquivo em `tools/`), independente do orquestrador — trocar um não afeta o outro.
 * **Vector DB:** ChromaDB com Google Generative AI Embeddings.
 * **Autenticação Google:** OAuth 2.0 (Calendar + Gmail), fluxo completo no backend.
 
@@ -90,6 +110,10 @@ GOOGLE_CLIENT_ID="seu_client_id"
 GOOGLE_CLIENT_SECRET='{"web":{...}}' # JSON string ou caminho para ficheiro
 AUTH_REDIRECT_URI="http://localhost:8000/auth/google/callback"
 AUTH_COOKIE_SECRET="string_aleatoria"
+
+# GitHub (GeradorDeStandup) — Personal Access Token com escopo de leitura
+GITHUB_TOKEN="ghp_seu_token_aqui"
+GITHUB_ORG="sharkdev"  # opcional se você sempre informar repositórios específicos
 
 # Proteção de /chat (header X-API-Key). Se não houver nenhum cliente
 # cadastrado (ver seção "Banco de Dados" abaixo) e esta variável ficar vazia,
@@ -179,6 +203,22 @@ alembic upgrade head
 
 ## 🔌 Endpoints principais
 
+> ⚠️ **Se você já tinha usuários logados antes desta versão:** o escopo do Google Drive (`drive.readonly`) foi adicionado ao OAuth. Sessões que já fizeram login antes não têm esse escopo — `BuscarNoDrive` vai falhar para elas até a pessoa refazer `/auth/google/login`.
+
+### Populando as novas bases de conhecimento (RAG)
+
+`RAGDaBaseDeCodigo` e `OnboardingGuiado` consultam coleções do Chroma que começam vazias. Para popular (mesmo padrão do Shark Helper, mas para arquivos `.md`/`.txt` em vez de PDF):
+
+```python
+from services.text_ingestion import create_text_embedding
+
+create_text_embedding("codebase_docs", "dados_codigo")      # READMEs, ADRs dos repositórios
+create_text_embedding("onboarding_docs", "dados_onboarding") # docs de onboarding
+```
+
+Reindexação é incremental: um arquivo só é reprocessado se o conteúdo mudou desde a última vez (controlado por `knowledge_documents`, a mesma tabela que já rastreia a indexação do Shark Helper).
+
+
 | Método | Rota | Descrição |
 |---|---|---|
 | `POST` | `/chat` | Envia uma mensagem para a Cidinha. Aceita `multipart/form-data` com campos `message`, `session_id` (opcional), `llm` (opcional) e `files` (opcional, um ou mais anexos). |
@@ -207,9 +247,9 @@ personal-assistant/
 │   ├── assets/          # Dados estáticos (fonte da seed inicial de employees)
 │   ├── db/              # Modelos SQLAlchemy, engine/sessão, seeds (base.py, models.py, seed.py)
 │   ├── models/          # Definições Pydantic (Inputs das Tools)
-│   ├── services/        # Clientes de API (Google, Chroma), SessionStore e callback de auditoria
-│   ├── tools/           # Ferramentas (Shark, Google Calendar, Gmail)
-│   ├── utils/           # Configurações e Embeddings
+│   ├── services/        # Google, Chroma, SessionStore, GitHub, auditoria/custo de LLM, ingestão de texto
+│   ├── tools/           # As ~19 ferramentas: Shark, Google, código, dev workflow, monitoramento, RAG...
+│   ├── utils/           # Configurações e Embeddings (PDF)
 │   └── main.py          # Ponto de entrada (app FastAPI)
 ├── migrations/           # Migrações Alembic (schema do banco)
 ├── alembic.ini

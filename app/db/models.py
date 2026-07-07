@@ -17,6 +17,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -150,3 +151,24 @@ class KnowledgeDocument(Base):
     num_pages = Column(Integer, nullable=True)
     content_hash = Column(String, nullable=True)
     indexed_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class LLMCall(Base):
+    """
+    Registro de cada chamada a um LLM (orquestrador OU o LLM interno de uma
+    skill especialista), para o MonitorDeCustosLLM. Diferente de `ToolCall`:
+    aquela tabela audita ferramentas (Calendar, Gmail...); esta audita
+    especificamente invocações de modelo de linguagem, com tokens e custo
+    estimado -- coisas que só fazem sentido para chamadas de LLM.
+    """
+
+    __tablename__ = "llm_calls"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String, nullable=True, index=True)
+    model = Column(String, nullable=False, index=True)
+    skill_name = Column(String, nullable=False, index=True)  # "orchestrator" ou o nome da skill especialista
+    tokens_in = Column(Integer, nullable=True)
+    tokens_out = Column(Integer, nullable=True)
+    estimated_cost_usd = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=_utcnow, index=True)

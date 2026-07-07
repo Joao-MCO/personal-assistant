@@ -7,6 +7,9 @@ sqlalchemy
 alembic
 psycopg2-binary
 
+# Auditoria de dependências (AuditoriaDeDependencias)
+pip-audit
+
 # API
 fastapi
 uvicorn[standard]

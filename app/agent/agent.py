@@ -9,13 +9,13 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from utils.files import get_emails
-from settings import WrappedSettings as Settings
+from utils.settings import WrappedSettings as Settings
 from utils.tool_cache import ToolResultCache
 from agent.llm_factory import LLMFactory
-from prompts.templates import AGENT_SYSTEM_PROMPT
+from agent.prompt import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
 from tools.google_tools import CheckCalendar, CreateEvent
-from tools.gmail import CheckEmail, SendEmail
+from tools.gmail import CheckEmail, SendEmail, BuscarNoDrive
 from services.google_auth import GoogleCredentialManager
 from services.audit_callback import SQLAuditCallbackHandler
 from threading import Lock
@@ -53,6 +53,7 @@ class AgentFactory:
             RuntimeError: Se erro ao inicializar LLM
         """
         logger.info(f"Inicializando AgentFactory com modelo: {llm}")
+        self.llm_name = llm
         
         try:
             # 1. Inicializar LLM com validação
@@ -66,13 +67,14 @@ class AgentFactory:
         self.check_calendar_tool = CheckCalendar()
         self.check_email_tool = CheckEmail()
         self.send_email_tool = SendEmail()
+        self.buscar_drive_tool = BuscarNoDrive()
         
         # 3. Ferramentas Globais + Ferramentas de Sessão
         global_tools = [
             t for t in agent_tools
             if t.name not in [
                 "CriarEvento", "ConsultarAgenda",
-                "ConsultarEmail", "EnviarEmail"
+                "ConsultarEmail", "EnviarEmail", "BuscarNoDrive"
             ]
         ]
         
@@ -80,7 +82,8 @@ class AgentFactory:
             self.create_event_tool, 
             self.check_calendar_tool, 
             self.check_email_tool, 
-            self.send_email_tool
+            self.send_email_tool,
+            self.buscar_drive_tool
         ]
         
         # Vincular ferramentas ao modelo
@@ -160,11 +163,23 @@ class AgentFactory:
         # Ferramentas cujo resultado deve ir DIRETO para o usuário, sem passar de
         # novo pelo LLM (equivalente ao `return_direct` do LangChain, mas aplicado
         # manualmente aqui porque o ToolNode do LangGraph não o lê automaticamente).
-        # Nenhuma ferramenta ativa hoje precisa disso — a antiga "AjudaProgramacao"
-        # (removida) e "DuvidasRPG" (de uma feature de RPG já removida) usavam.
-        # Se uma nova ferramenta já entregar a resposta final formatada (ex.: uma
-        # futura "RevisorDeCodigo"), adicione o nome dela aqui.
-        TOOLS_RETURN_DIRECT: List[str] = []
+        # Critério: ferramentas que já chamam seu próprio LLM especialista e
+        # devolvem uma resposta final e formatada — reprocessá-las pelo
+        # orquestrador só arriscaria reformatar/resumir algo que já está pronto.
+        # MonitorDeCustosLLM, HealthCheckAgregado e as RAGs ficam de fora de
+        # propósito: elas devolvem dado bruto que se beneficia de uma síntese
+        # do orquestrador antes de chegar ao usuário.
+        TOOLS_RETURN_DIRECT: List[str] = [
+            "RevisorDeCodigo",
+            "GeradorDeTestes",
+            "DiagnosticoDeErro",
+            "GeradorDeDocumentacao",
+            "RevisorDeSeguranca",
+            "GeradorDeCommitMessage",
+            "AuditoriaDeDependencias",
+            "GeradorDeStandup",
+            "TradutorTecnico",
+        ]
 
         def after_tools_router(state: AgentState) -> str:
             """Rota lógica após execução de ferramentas"""
@@ -322,7 +337,8 @@ class AgentFactory:
                     self.create_event_tool,
                     self.check_calendar_tool,
                     self.check_email_tool,
-                    self.send_email_tool
+                    self.send_email_tool,
+                    self.buscar_drive_tool
                 ]:
                     tool.set_credentials(user_credentials)
                 
@@ -377,7 +393,7 @@ class AgentFactory:
             
             # 6. Invocar agente (com callback de auditoria/analytics de tool_calls)
             logger.info("Invocando LangGraph...")
-            audit_callback = SQLAuditCallbackHandler(session_id=session_id)
+            audit_callback = SQLAuditCallbackHandler(session_id=session_id, model_family=self.llm_name)
             result = self.graph.invoke(
                 {"messages": lc_messages},
                 config={"callbacks": [audit_callback]}

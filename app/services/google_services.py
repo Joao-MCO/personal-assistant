@@ -70,4 +70,7 @@ def get_service(credentials=None, service="calendar"):
     if service == "gmail":
         return _build_service(credentials, "gmail", "v1")
 
+    if service == "drive":
+        return _build_service(credentials, "drive", "v3")
+
     return None

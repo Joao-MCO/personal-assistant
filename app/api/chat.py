@@ -79,6 +79,7 @@ async def chat(
         uploaded_files=files_to_send,
         user_credentials=_build_credentials(creds_dict),
         user_infos=user_infos,
+        session_id=sid,
     )
 
     outputs = result.get("output", [])

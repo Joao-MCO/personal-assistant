@@ -193,6 +193,41 @@ class LLMFactory:
             )
     
     @staticmethod
+    def create_llm_fast(model_name: str) -> Any:
+        """
+        Como create_llm(), mas SEM o ping de teste (`llm.invoke("test")`).
+
+        Pensado para as skills especialistas (RevisorDeCodigo, GeradorDeTestes...),
+        que criam um LLM e já fazem uma chamada real logo em seguida a cada
+        execução -- usar create_llm() ali dobraria o custo/latência de cada
+        chamada com um teste desnecessário (se a API key estiver com problema,
+        a chamada real já vai falhar sozinha, de forma clara, sem precisar de
+        um teste prévio). O orquestrador principal continua usando create_llm()
+        normalmente, já que ele só é instanciado uma vez por requisição.
+
+        Args:
+            model_name: Nome do modelo ('gemini', 'gpt', 'claude')
+
+        Returns:
+            Instância de LLM, sem teste de conectividade prévio
+
+        Raises:
+            ValueError: Se modelo inválido ou API key ausente
+        """
+        valid, error_msg = LLMFactory.validate_model(model_name)
+        if not valid:
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        config = MODEL_CONFIG[model_name]
+        api_key = os.environ[config["env_key"]]
+        return config["class"](
+            api_key=api_key,
+            model=config["model"],
+            temperature=config["temperature"]
+        )
+
+    @staticmethod
     def create_llm_with_fallback(
         primary_model: str = "gemini",
         fallback_model: str = "gpt"

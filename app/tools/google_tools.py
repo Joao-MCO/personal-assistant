@@ -11,6 +11,10 @@ from models.tools import (
     CreateEventInput
 )
 
+import time
+from typing import Any, Type
+from models.tools import BuscarNoDriveInput
+
 logger = logging.getLogger(__name__)
 
 MSG_LOGIN = (
@@ -157,3 +161,65 @@ class CheckCalendar(BaseTool):
             return f"Erro ao consultar agenda: {e}"
 
 # -------------------------------------------------------------------
+
+def _escape_query(q: str) -> str:
+    """Escapa aspas simples pra não quebrar a sintaxe de busca do Drive."""
+    return q.replace("'", "\\'")
+
+
+class BuscarNoDrive(BaseTool):
+    name: str = "BuscarNoDrive"
+    description: str = """
+    Use para buscar arquivos no Google Drive da SharkDev — atas/resumos de
+    reunião, documentos, planilhas. Busca por nome do arquivo e por conteúdo.
+    NÃO gera resumos de reunião a partir de transcrição — só encontra
+    documentos que já existem no Drive.
+    """
+    args_schema: Type[BaseModel] = BuscarNoDriveInput
+    return_direct: bool = False
+    _user_credentials: Any = PrivateAttr(default=None)
+
+    def set_credentials(self, creds):
+        self._user_credentials = creds
+
+    def _run(self, query: str, max_resultados: int = 5) -> str:
+        start = time.time()
+        logger.info(f"Tool BuscarNoDrive iniciada. query='{query}'")
+
+        if not self._user_credentials:
+            return MSG_LOGIN
+
+        from services.google_services import get_service
+        service = get_service(self._user_credentials, "drive")
+        if not service:
+            return "Erro técnico ao autenticar no Google Drive."
+
+        try:
+            escaped = _escape_query(query)
+            q = f"(name contains '{escaped}' or fullText contains '{escaped}') and trashed = false"
+
+            results = (
+                service.files()
+                .list(
+                    q=q,
+                    pageSize=max_resultados,
+                    orderBy="modifiedTime desc",
+                    fields="files(id, name, webViewLink, modifiedTime, mimeType)",
+                )
+                .execute()
+            )
+            files = results.get("files", [])
+
+            if not files:
+                return f"Não encontrei nenhum arquivo no Drive para '{query}'."
+
+            linhas = [f"Encontrei {len(files)} arquivo(s) para '{query}':"]
+            for f in files:
+                linhas.append(f"- {f['name']} (modificado em {f.get('modifiedTime', '?')}) — {f.get('webViewLink', '')}")
+            return "\n".join(linhas)
+
+        except Exception as e:
+            logger.error(f"Erro BuscarNoDrive: {e}", exc_info=True)
+            return f"Erro ao buscar no Drive: {e}"
+        finally:
+            logger.info(f"BuscarNoDrive — tempo de execução: {time.time() - start:.2f}s")
