@@ -32,10 +32,9 @@ from google_auth_oauthlib.flow import Flow
 from sqlalchemy.orm import Session as DBSession
 
 from api.schemas import GoogleStatusResponse
-from db.base import get_db
-from db.models import ApiClient
+from db.base import SessionLocal, get_db
+from db.models import ApiClient, Employee
 from services.session_store import session_store
-from utils.files import get_emails
 from utils.settings import WrappedSettings as Settings
 
 logger = logging.getLogger(__name__)
@@ -166,14 +165,24 @@ async def google_callback(code: str, state: str):
             email = data.get("email")
             nome_user = data.get("name", "Usuário")
 
-            # Tenta trocar pelo nome amigável da lista interna da SharkDev
+            # Busca o funcionário correspondente (nome amigável + o id, usado
+            # pra vincular a sessão ao funcionário — ver services/permissions.py)
+            employee_id = None
             try:
-                emails_internos = get_emails()
-                match = next((x for x in emails_internos if x.get("email") == email), None)
-                if match:
-                    nome_user = match["nome"].replace(" - SharkDev", "")
+                db = SessionLocal()
+                try:
+                    employee = db.query(Employee).filter(Employee.email == email, Employee.ativo == True).first()  # noqa: E712
+                    if employee:
+                        nome_user = employee.nome.replace(" - SharkDev", "")
+                        employee_id = employee.id
+                finally:
+                    db.close()
             except Exception:
-                logger.warning("Não foi possível casar o e-mail com a lista interna.", exc_info=True)
+                logger.warning("Não foi possível casar o e-mail com o cadastro de funcionários.", exc_info=True)
+
+            session_store.link_employee(sid, employee_id)
+            if employee_id is None:
+                logger.info(f"Login Google sem funcionário correspondente ({email}) — sessão tratada como 'guest'.")
 
             user_info = {"user": nome_user, "email": email}
             session_store.set_user_info(sid, user_info)

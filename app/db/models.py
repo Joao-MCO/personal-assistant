@@ -45,6 +45,12 @@ class SessionModel(Base):
     id = Column(String, primary_key=True, default=_new_uuid)
     user_name = Column(String, nullable=True)
     user_email = Column(String, nullable=True)
+    # Link formal com o funcionário, preenchido no callback do OAuth (auth.py)
+    # quando o e-mail da conta Google logada bate com um Employee. Antes esse
+    # "match" só acontecia em tempo de execução (comparação de string), sem
+    # nenhuma relação persistida -- isso formaliza como chave estrangeira de
+    # verdade, e é o que a checagem de permissões usa.
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=_utcnow)
     last_active = Column(DateTime, default=_utcnow)
 
@@ -97,6 +103,30 @@ class Employee(Base):
     nome = Column(String, nullable=False)
     email = Column(String, nullable=False, unique=True, index=True)
     ativo = Column(Boolean, default=True)
+    # "admin" | "member" | "guest" -- define o conjunto padrão de ferramentas
+    # que a pessoa pode usar em conversa (ver services/permissions.py).
+    # Não é um Enum de banco de propósito: adicionar um cargo novo não deve
+    # exigir uma migração de schema, só atualizar o mapeamento em código.
+    role = Column(String, nullable=False, default="member")
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class EmployeeToolGrant(Base):
+    """
+    Exceção de permissão POR FUNCIONÁRIO, além do que o cargo (Employee.role)
+    já concede por padrão. `granted=True` libera uma ferramenta que o cargo
+    não liberaria; `granted=False` bloqueia uma que o cargo liberaria. Se não
+    existir linha aqui para (employee, tool), vale o padrão do cargo -- ver
+    services/permissions.py.
+    """
+
+    __tablename__ = "employee_tool_grants"
+    __table_args__ = (UniqueConstraint("employee_id", "tool_name", name="uq_employee_tool"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    tool_name = Column(String, nullable=False)
+    granted = Column(Boolean, nullable=False)
     created_at = Column(DateTime, default=_utcnow)
 
 

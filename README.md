@@ -155,12 +155,48 @@ Na primeira subida, a aplicação cria automaticamente todas as tabelas (via `Ba
 
 | Tabela | Para quê |
 |---|---|
-| `sessions` / `messages` | Histórico de conversa por `session_id` (antes: em memória, zerava a cada restart). |
+| `sessions` / `messages` | Histórico de conversa por `session_id` (antes: em memória, zerava a cada restart). `sessions.employee_id` vincula a sessão a um funcionário depois do login Google. |
 | `google_credentials` | Token OAuth do Google por sessão (antes: também em memória). |
-| `employees` | Contatos internos da SharkDev (antes: `emails.json` estático). |
+| `employees` | Contatos internos da SharkDev (antes: `emails.json` estático) + `role` (`admin`/`member`/`guest`), que define o acesso padrão às ferramentas. |
+| `employee_tool_grants` | Exceções de permissão *por funcionário*, além do que o cargo já dá (libera ou bloqueia uma ferramenta específica). |
 | `api_clients` | Clientes autorizados a chamar `/chat`, cada um com sua própria chave, revogável individualmente (antes: uma única `API_KEY`). |
 | `tool_calls` | Auditoria + analytics de cada chamada de ferramenta (Calendar, Gmail, Shark Helper...): parâmetros, resultado, sucesso/erro, duração. |
-| `knowledge_documents` | Controle de quais arquivos já foram indexados no Chroma pelo Shark Helper (`app/utils/embedding.py`) — os vetores continuam só no Chroma, isso é só o registro de auditoria de cima. |
+| `llm_calls` | Uso/custo estimado de cada chamada de LLM, por modelo e por skill — base do `MonitorDeCustosLLM`. |
+| `knowledge_documents` | Controle de quais arquivos já foram indexados no Chroma pelo Shark Helper/RAGs — os vetores continuam só no Chroma, isso é só o registro de auditoria de cima. |
+
+### Permissões por usuário
+
+Cada funcionário tem um **cargo** (`role`, default `member` na seed) que define o conjunto padrão de ferramentas que ele pode usar em conversa:
+
+| Cargo | Acesso padrão |
+|---|---|
+| `guest` | Quem loga no Google mas não bate com nenhum e-mail cadastrado (ou quem nunca logou): só `AjudaShark`, `RAGDaBaseDeCodigo`, `OnboardingGuiado`, `TradutorTecnico`. |
+| `member` | Todas as ferramentas, exceto as marcadas como sensíveis (`MonitorDeCustosLLM`, `HealthCheckAgregado`, `AuditoriaDeDependencias`, `RevisorDeSeguranca` — ver `ADMIN_ONLY_TOOLS` em `services/permissions.py`). |
+| `admin` | Todas as ferramentas. |
+
+O vínculo entre sessão e funcionário é feito automaticamente no login Google (por e-mail, gravado em `sessions.employee_id`) — quem faz login com um e-mail cadastrado em `employees` já herda o cargo dessa pessoa na próxima mensagem enviada a `/chat`.
+
+Além do cargo, dá pra abrir exceções **por pessoa** (liberar uma ferramenta sensível pra alguém específico, ou bloquear uma que o cargo liberaria):
+
+```bash
+# Mudar o cargo de um funcionário
+curl -X PATCH http://localhost:8000/admin/employees/{id}/role \
+  -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"role": "admin"}'
+
+# Ver o acesso efetivo de um funcionário, ferramenta por ferramenta
+curl http://localhost:8000/admin/employees/{id}/tool-access -H "X-Admin-Token: $ADMIN_TOKEN"
+
+# Liberar uma ferramenta sensível só pra essa pessoa, além do que o cargo já dá
+curl -X PUT http://localhost:8000/admin/employees/{id}/tool-access/AuditoriaDeDependencias \
+  -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"granted": true}'
+
+# Remover a exceção (volta a valer o padrão do cargo)
+curl -X DELETE http://localhost:8000/admin/employees/{id}/tool-access/AuditoriaDeDependencias -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
+> A restrição é aplicada na montagem do agente (`AgentFactory`, em `agent/agent.py`): o LLM só recebe, via `bind_tools`, as ferramentas permitidas para aquela sessão — ele literalmente não tem como chamar uma ferramenta que não foi vinculada.
 
 ### Gerenciando funcionários e chaves de API
 
@@ -183,6 +219,7 @@ curl -X POST http://localhost:8000/admin/api-clients \
 # Revogar uma chave (sem afetar outros clientes)
 curl -X DELETE http://localhost:8000/admin/api-clients/1 -H "X-Admin-Token: $ADMIN_TOKEN"
 ```
+
 
 ### Alterando o schema (Alembic)
 

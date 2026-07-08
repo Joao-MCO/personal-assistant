@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -42,6 +42,15 @@ class EmployeeOut(BaseModel):
     nome: str
     email: str
     ativo: bool
+    role: str
+
+
+class EmployeeRoleUpdate(BaseModel):
+    role: Literal["admin", "member", "guest"]
+
+
+class ToolAccessUpdate(BaseModel):
+    granted: bool = Field(..., description="True libera a ferramenta pra este funcionário; False bloqueia — em ambos os casos, além do que o cargo já daria.")
 
 
 # ---------------------------------------------------------------------------

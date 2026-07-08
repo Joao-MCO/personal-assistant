@@ -27,9 +27,12 @@ from api.schemas import (
     ApiClientOut,
     EmployeeCreate,
     EmployeeOut,
+    EmployeeRoleUpdate,
+    ToolAccessUpdate,
 )
 from db.base import get_db
 from db.models import ApiClient, Employee
+from services.permissions import clear_tool_grant, get_effective_tool_access, set_tool_grant
 from utils.settings import WrappedSettings as Settings
 
 logger = logging.getLogger(__name__)
@@ -56,7 +59,7 @@ async def verify_admin(x_admin_token: str = Header(default=None, alias=ADMIN_HEA
 @router.get("/employees", response_model=list[EmployeeOut], dependencies=[Depends(verify_admin)])
 async def list_employees(db: DBSession = Depends(get_db)):
     rows = db.query(Employee).order_by(Employee.nome).all()
-    return [EmployeeOut(id=r.id, nome=r.nome, email=r.email, ativo=r.ativo) for r in rows]
+    return [EmployeeOut(id=r.id, nome=r.nome, email=r.email, ativo=r.ativo, role=r.role) for r in rows]
 
 
 @router.post("/employees", response_model=EmployeeOut, dependencies=[Depends(verify_admin)])
@@ -66,7 +69,7 @@ async def create_employee(payload: EmployeeCreate, db: DBSession = Depends(get_d
     row = Employee(nome=payload.nome, email=payload.email, ativo=True)
     db.add(row)
     db.commit()
-    return EmployeeOut(id=row.id, nome=row.nome, email=row.email, ativo=row.ativo)
+    return EmployeeOut(id=row.id, nome=row.nome, email=row.email, ativo=row.ativo, role=row.role)
 
 
 @router.delete("/employees/{employee_id}", response_model=EmployeeOut, dependencies=[Depends(verify_admin)])
@@ -77,7 +80,47 @@ async def deactivate_employee(employee_id: int, db: DBSession = Depends(get_db))
         raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
     row.ativo = False
     db.commit()
-    return EmployeeOut(id=row.id, nome=row.nome, email=row.email, ativo=row.ativo)
+    return EmployeeOut(id=row.id, nome=row.nome, email=row.email, ativo=row.ativo, role=row.role)
+
+
+# ---------------------------------------------------------------------------
+# Permissões (cargo + exceções por ferramenta)
+# ---------------------------------------------------------------------------
+
+@router.patch("/employees/{employee_id}/role", response_model=EmployeeOut, dependencies=[Depends(verify_admin)])
+async def update_employee_role(employee_id: int, payload: EmployeeRoleUpdate, db: DBSession = Depends(get_db)):
+    row = db.query(Employee).filter(Employee.id == employee_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
+    row.role = payload.role
+    db.commit()
+    return EmployeeOut(id=row.id, nome=row.nome, email=row.email, ativo=row.ativo, role=row.role)
+
+
+@router.get("/employees/{employee_id}/tool-access", dependencies=[Depends(verify_admin)])
+async def get_tool_access(employee_id: int, db: DBSession = Depends(get_db)):
+    """Visão completa: para cada ferramenta, se está liberada e se isso vem do cargo ou de uma exceção individual."""
+    if db.query(Employee).filter(Employee.id == employee_id).first() is None:
+        raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
+    return get_effective_tool_access(employee_id)
+
+
+@router.put("/employees/{employee_id}/tool-access/{tool_name}", dependencies=[Depends(verify_admin)])
+async def grant_or_revoke_tool(
+    employee_id: int, tool_name: str, payload: ToolAccessUpdate, db: DBSession = Depends(get_db)
+):
+    """Cria uma exceção individual (granted=true libera, granted=false bloqueia), além do padrão do cargo."""
+    if db.query(Employee).filter(Employee.id == employee_id).first() is None:
+        raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
+    set_tool_grant(employee_id, tool_name, payload.granted)
+    return {"employee_id": employee_id, "tool_name": tool_name, "granted": payload.granted}
+
+
+@router.delete("/employees/{employee_id}/tool-access/{tool_name}", dependencies=[Depends(verify_admin)])
+async def remove_tool_override(employee_id: int, tool_name: str, db: DBSession = Depends(get_db)):
+    """Remove a exceção individual -- volta a valer o padrão do cargo para esta ferramenta."""
+    removed = clear_tool_grant(employee_id, tool_name)
+    return {"employee_id": employee_id, "tool_name": tool_name, "removed": removed}
 
 
 # ---------------------------------------------------------------------------

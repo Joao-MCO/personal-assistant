@@ -202,6 +202,30 @@ class SessionStore:
         finally:
             db.close()
 
+    # ------------------------------------------------------------------
+    # Vínculo com o funcionário (permissões — services/permissions.py)
+    # ------------------------------------------------------------------
+
+    def link_employee(self, session_id: str, employee_id: Optional[int]) -> None:
+        db = SessionLocal()
+        try:
+            row = db.query(SessionModel).filter(SessionModel.id == session_id).first()
+            if row is None:
+                row = SessionModel(id=session_id)
+                db.add(row)
+            row.employee_id = employee_id
+            db.commit()
+        finally:
+            db.close()
+
+    def get_employee_id(self, session_id: str) -> Optional[int]:
+        db = SessionLocal()
+        try:
+            row = db.query(SessionModel).filter(SessionModel.id == session_id).first()
+            return row.employee_id if row else None
+        finally:
+            db.close()
+
 
 # Instância única compartilhada pela aplicação inteira.
 session_store = SessionStore()

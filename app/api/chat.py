@@ -26,6 +26,7 @@ import google.oauth2.credentials
 from agent.agent import AgentFactory
 from api.auth import verify_api_key
 from api.schemas import ChatMessage, ChatResponse, HistoryResponse
+from services.permissions import get_allowed_tool_names
 from services.session_store import session_store
 from utils.settings import WrappedSettings as Settings
 
@@ -67,9 +68,11 @@ async def chat(
     history = session_store.get_messages(sid)
     creds_dict = session_store.get_google_credentials(sid)
     user_infos = session_store.get_user_info(sid) or {}
+    employee_id = session_store.get_employee_id(sid)
+    allowed_tools = get_allowed_tool_names(employee_id)
 
     try:
-        factory = AgentFactory(llm=llm)
+        factory = AgentFactory(llm=llm, allowed_tools=allowed_tools)
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 

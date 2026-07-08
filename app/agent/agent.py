@@ -12,14 +12,11 @@ from utils.files import get_emails
 from utils.settings import WrappedSettings as Settings
 from utils.tool_cache import ToolResultCache
 from agent.llm_factory import LLMFactory
-from agent.prompt import AGENT_SYSTEM_PROMPT
+from prompts.templates import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
-from tools.google_tools import (
-    CheckCalendar,
-    CreateEvent,
-    BuscarNoDrive,
-)
+from tools.google_tools import CheckCalendar, CreateEvent
 from tools.gmail import CheckEmail, SendEmail
+from tools.drive import BuscarNoDrive
 from services.google_auth import GoogleCredentialManager
 from services.audit_callback import SQLAuditCallbackHandler
 from threading import Lock
@@ -45,12 +42,17 @@ class AgentFactory:
     - Rate limiting (delegado a main.py)
     """
     
-    def __init__(self, llm: str = "gemini"):
+    def __init__(self, llm: str = "gemini", allowed_tools: Optional[set] = None):
         """
         Inicializa AgentFactory
         
         Args:
             llm: Modelo LLM a usar ('gemini', 'gpt', etc)
+            allowed_tools: Conjunto de nomes de ferramentas permitidas para
+                esta invocação (ver services/permissions.py). None = sem
+                filtragem, todas as ferramentas disponíveis (uso interno/
+                administrativo; o /chat da API sempre passa um valor
+                explícito, calculado a partir do funcionário da sessão).
         
         Raises:
             ValueError: Se modelo inválido
@@ -89,6 +91,16 @@ class AgentFactory:
             self.send_email_tool,
             self.buscar_drive_tool
         ]
+
+        # 3b. Filtra pelas permissões do usuário, se informadas. O LLM só
+        # recebe (via bind_tools, logo abaixo) as ferramentas permitidas —
+        # ele literalmente não tem como chamar uma ferramenta que não foi
+        # vinculada, então a restrição é aplicada aqui, não checada depois
+        # dentro de cada tool.
+        if allowed_tools is not None:
+            antes = len(self.tools)
+            self.tools = [t for t in self.tools if t.name in allowed_tools]
+            logger.info(f"Permissões aplicadas: {len(self.tools)}/{antes} ferramenta(s) disponível(eis) para esta sessão.")
         
         # Vincular ferramentas ao modelo
         try:
