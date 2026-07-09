@@ -1,100 +1,43 @@
 """
-Ingestão de arquivos de texto/markdown (READMEs, ADRs, docs de onboarding)
-no Chroma -- irmã de app/utils/embedding.py, que só lida com PDF. Chunking
-mais simples aqui: por número de caracteres, já que não há conceito de
-"página" em markdown puro.
-
-Usado para popular as coleções consultadas por RAGDaBaseDeCodigo
-(tools/knowledge_rag.py) e OnboardingGuiado.
+Helper compartilhado entre app/utils/embedding.py (ingestão de PDFs) e
+services/text_ingestion.py (ingestão de texto/markdown): registra em
+`knowledge_documents` que um arquivo foi indexado no Chroma. Extraído pra cá
+pra não duplicar a mesma lógica nos dois lugares.
 """
 
-import hashlib
 import logging
-import os
-import uuid
-from typing import List
-
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-
-from services.chroma import get_collection
-from services.knowledge_tracking import registrar_documento_indexado
-from utils.settings import WrappedSettings as Settings
 
 logger = logging.getLogger(__name__)
 
-CHUNK_SIZE_CHARS = 3000
-CHUNK_OVERLAP_CHARS = 300
 
-
-def _split_into_chunks(text: str, chunk_size: int = CHUNK_SIZE_CHARS, overlap: int = CHUNK_OVERLAP_CHARS) -> List[str]:
-    if len(text) <= chunk_size:
-        return [text] if text.strip() else []
-
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start = end - overlap
-    return [c for c in chunks if c.strip()]
-
-
-def create_text_embedding(collection: str, directory: str) -> int:
+def registrar_documento_indexado(collection: str, filename: str, num_pages: int, content_hash: str) -> None:
     """
-    Indexa todos os arquivos .md/.txt de `directory` na coleção `collection`
-    do Chroma. Retorna quantos arquivos foram processados.
+    Registra (ou atualiza) que um arquivo foi indexado no Chroma -- os
+    vetores continuam só no Chroma, isso é apenas o controle/auditoria de
+    cima: o que já foi indexado, quando, e se o conteúdo mudou desde a
+    última vez (via content_hash).
 
-    Reindexação: se o arquivo já foi indexado antes com o mesmo conteúdo
-    (mesmo content_hash em knowledge_documents), pula -- evita reprocessar
-    (e pagar por embeddings de novo) sem necessidade a cada execução.
+    Uma falha aqui não deve impedir a indexação em si (que já aconteceu no
+    Chroma antes desta chamada) -- por isso o try/except só loga o erro.
     """
-    if not os.path.isdir(directory):
-        logger.warning(f"Diretório '{directory}' não existe -- nada para indexar.")
-        return 0
-
-    collection_obj = get_collection(collection)
-    embedding_func = GoogleGenerativeAIEmbeddings(model=Settings.gemini["embedding"])
-
-    from db.base import SessionLocal
-    from db.models import KnowledgeDocument
-
-    processados = 0
-    for filename in os.listdir(directory):
-        if not filename.lower().endswith((".md", ".txt")):
-            continue
-
-        full_path = os.path.join(directory, filename)
-        with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-        content_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+    try:
+        from db.base import SessionLocal
+        from db.models import KnowledgeDocument
 
         db = SessionLocal()
         try:
-            existing = (
+            row = (
                 db.query(KnowledgeDocument)
                 .filter(KnowledgeDocument.collection == collection, KnowledgeDocument.filename == filename)
                 .first()
             )
-            if existing is not None and existing.content_hash == content_hash:
-                logger.info(f"'{filename}' sem mudanças desde a última indexação — pulando.")
-                continue
+            if row is None:
+                row = KnowledgeDocument(collection=collection, filename=filename)
+                db.add(row)
+            row.num_pages = num_pages
+            row.content_hash = content_hash
+            db.commit()
         finally:
             db.close()
-
-        chunks = _split_into_chunks(content)
-        if not chunks:
-            continue
-
-        ids, embeddings, metadatas, docs = [], [], [], []
-        for i, chunk in enumerate(chunks):
-            ids.append(str(uuid.uuid4()))
-            embeddings.append(embedding_func.embed_query(chunk))
-            metadatas.append({"doc": filename, "chunk": i})
-            docs.append(chunk)
-
-        collection_obj.upsert(ids=ids, embeddings=embeddings, metadatas=metadatas, documents=docs)
-        registrar_documento_indexado(collection, filename, len(chunks), content_hash)
-        processados += 1
-        logger.info(f"Indexado: {filename} ({len(chunks)} chunk(s)) em '{collection}'.")
-
-    return processados
+    except Exception:
+        logger.exception(f"Falha ao registrar '{filename}' em knowledge_documents (indexação no Chroma não é afetada)")
