@@ -12,11 +12,10 @@ from utils.files import get_emails
 from utils.settings import WrappedSettings as Settings
 from utils.tool_cache import ToolResultCache
 from agent.llm_factory import LLMFactory
-from prompts.templates import AGENT_SYSTEM_PROMPT
+from agent.prompt import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
-from tools.google_tools import CheckCalendar, CreateEvent
+from tools.google_tools import CheckCalendar, CreateEvent, BuscarNoDrive
 from tools.gmail import CheckEmail, SendEmail
-from tools.drive import BuscarNoDrive
 from services.google_auth import GoogleCredentialManager
 from services.audit_callback import SQLAuditCallbackHandler
 from threading import Lock
