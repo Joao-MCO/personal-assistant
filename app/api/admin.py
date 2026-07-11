@@ -17,6 +17,7 @@ o dano potencial de deixar isso aberto é maior (criar/revogar acesso à API).
 import hashlib
 import logging
 import secrets
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session as DBSession
@@ -25,6 +26,7 @@ from api.schemas import (
     ApiClientCreate,
     ApiClientCreated,
     ApiClientOut,
+    EmployeeBirthdayUpdate,
     EmployeeCreate,
     EmployeeOut,
     EmployeeRoleUpdate,
@@ -39,6 +41,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 ADMIN_HEADER = "X-Admin-Token"
+
+
+def _to_employee_out(row: Employee) -> EmployeeOut:
+    return EmployeeOut(
+        id=row.id,
+        nome=row.nome,
+        email=row.email,
+        ativo=row.ativo,
+        role=row.role,
+        data_nascimento=row.data_nascimento.isoformat() if row.data_nascimento else None,
+    )
 
 
 async def verify_admin(x_admin_token: str = Header(default=None, alias=ADMIN_HEADER)):
@@ -59,7 +72,7 @@ async def verify_admin(x_admin_token: str = Header(default=None, alias=ADMIN_HEA
 @router.get("/employees", response_model=list[EmployeeOut], dependencies=[Depends(verify_admin)])
 async def list_employees(db: DBSession = Depends(get_db)):
     rows = db.query(Employee).order_by(Employee.nome).all()
-    return [EmployeeOut(id=r.id, nome=r.nome, email=r.email, ativo=r.ativo, role=r.role) for r in rows]
+    return [_to_employee_out(r) for r in rows]
 
 
 @router.post("/employees", response_model=EmployeeOut, dependencies=[Depends(verify_admin)])
@@ -69,7 +82,7 @@ async def create_employee(payload: EmployeeCreate, db: DBSession = Depends(get_d
     row = Employee(nome=payload.nome, email=payload.email, ativo=True)
     db.add(row)
     db.commit()
-    return EmployeeOut(id=row.id, nome=row.nome, email=row.email, ativo=row.ativo, role=row.role)
+    return _to_employee_out(row)
 
 
 @router.delete("/employees/{employee_id}", response_model=EmployeeOut, dependencies=[Depends(verify_admin)])
@@ -80,7 +93,21 @@ async def deactivate_employee(employee_id: int, db: DBSession = Depends(get_db))
         raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
     row.ativo = False
     db.commit()
-    return EmployeeOut(id=row.id, nome=row.nome, email=row.email, ativo=row.ativo, role=row.role)
+    return _to_employee_out(row)
+
+
+@router.patch("/employees/{employee_id}/birthday", response_model=EmployeeOut, dependencies=[Depends(verify_admin)])
+async def update_employee_birthday(employee_id: int, payload: EmployeeBirthdayUpdate, db: DBSession = Depends(get_db)):
+    """Usado pelo AniversariantesDoMes -- não vem do emails.json, precisa ser preenchida aqui."""
+    row = db.query(Employee).filter(Employee.id == employee_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
+    try:
+        row.data_nascimento = datetime.strptime(payload.data_nascimento, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Data inválida -- use o formato AAAA-MM-DD.")
+    db.commit()
+    return _to_employee_out(row)
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +121,7 @@ async def update_employee_role(employee_id: int, payload: EmployeeRoleUpdate, db
         raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
     row.role = payload.role
     db.commit()
-    return EmployeeOut(id=row.id, nome=row.nome, email=row.email, ativo=row.ativo, role=row.role)
+    return _to_employee_out(row)
 
 
 @router.get("/employees/{employee_id}/tool-access", dependencies=[Depends(verify_admin)])

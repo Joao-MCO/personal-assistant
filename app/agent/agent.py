@@ -14,8 +14,20 @@ from utils.tool_cache import ToolResultCache
 from agent.llm_factory import LLMFactory
 from agent.prompt import AGENT_SYSTEM_PROMPT
 from tools.manager import agent_tools
-from tools.google_tools import CheckCalendar, CreateEvent, BuscarNoDrive
+from tools.google_tools import (
+    CheckCalendar,
+    CreateEvent,
+    BuscarNoDrive,
+    ArquivosRecentesDrive,
+    ConsultarDocumentosDrive,
+)
 from tools.gmail import CheckEmail, SendEmail
+from tools.tasks import CriarTarefa, ConsultarTarefas, ConcluirTarefa
+from tools.notes import SalvarNota, ConsultarNotas
+from tools.scheduler_tools import CriarRotina, ListarRotinas
+from tools.shorturl import EncurtarURL
+from tools.dashboard import DashboardPessoal
+from tools.catalog import CatalogoDeSkills
 from services.google_auth import GoogleCredentialManager
 from services.audit_callback import SQLAuditCallbackHandler
 from threading import Lock
@@ -73,22 +85,53 @@ class AgentFactory:
         self.check_email_tool = CheckEmail()
         self.send_email_tool = SendEmail()
         self.buscar_drive_tool = BuscarNoDrive()
+        self.arquivos_recentes_drive_tool = ArquivosRecentesDrive()
+        self.consultar_documentos_drive_tool = ConsultarDocumentosDrive()
+        self.criar_tarefa_tool = CriarTarefa()
+        self.consultar_tarefas_tool = ConsultarTarefas()
+        self.concluir_tarefa_tool = ConcluirTarefa()
+
+        # 2b. Ferramentas que precisam do employee_id da sessão (não de
+        # credencial Google -- funcionam mesmo sem login no Google, só
+        # precisam saber "de quem" é a sessão pra escopar o dado certo).
+        self.salvar_nota_tool = SalvarNota()
+        self.consultar_notas_tool = ConsultarNotas()
+        self.criar_rotina_tool = CriarRotina()
+        self.listar_rotinas_tool = ListarRotinas()
+        self.encurtar_url_tool = EncurtarURL()
+        self.catalogo_de_skills_tool = CatalogoDeSkills()
+
+        # DashboardPessoal precisa das duas coisas: credencial (pra Tasks) e employee_id (pro custo)
+        self.dashboard_pessoal_tool = DashboardPessoal()
         
         # 3. Ferramentas Globais + Ferramentas de Sessão
-        global_tools = [
-            t for t in agent_tools
-            if t.name not in [
-                "CriarEvento", "ConsultarAgenda",
-                "ConsultarEmail", "EnviarEmail", "BuscarNoDrive"
-            ]
+        _NOMES_FERRAMENTAS_DE_SESSAO = [
+            "CriarEvento", "ConsultarAgenda", "ConsultarEmail", "EnviarEmail",
+            "BuscarNoDrive", "ArquivosRecentesDrive", "ConsultarDocumentosDrive",
+            "CriarTarefa", "ConsultarTarefas", "ConcluirTarefa",
+            "SalvarNota", "ConsultarNotas", "CriarRotina", "ListarRotinas",
+            "EncurtarURL", "CatalogoDeSkills", "DashboardPessoal",
         ]
+        global_tools = [t for t in agent_tools if t.name not in _NOMES_FERRAMENTAS_DE_SESSAO]
         
         self.tools = global_tools + [
             self.create_event_tool, 
             self.check_calendar_tool, 
             self.check_email_tool, 
             self.send_email_tool,
-            self.buscar_drive_tool
+            self.buscar_drive_tool,
+            self.arquivos_recentes_drive_tool,
+            self.consultar_documentos_drive_tool,
+            self.criar_tarefa_tool,
+            self.consultar_tarefas_tool,
+            self.concluir_tarefa_tool,
+            self.salvar_nota_tool,
+            self.consultar_notas_tool,
+            self.criar_rotina_tool,
+            self.listar_rotinas_tool,
+            self.encurtar_url_tool,
+            self.catalogo_de_skills_tool,
+            self.dashboard_pessoal_tool,
         ]
 
         # 3b. Filtra pelas permissões do usuário, se informadas. O LLM só
@@ -314,7 +357,8 @@ class AgentFactory:
         uploaded_files: List[Dict[str, Any]] = None,
         user_credentials: Any = None,
         user_infos: Dict[str, Any] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        employee_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Invoca o agente com entrada do usuário
@@ -328,6 +372,11 @@ class AgentFactory:
             session_id: Id da sessão (usado só para marcar as linhas de
                 auditoria em `tool_calls` -- ver services/audit_callback.py).
                 Opcional: se omitido, a auditoria é gravada sem session_id.
+            employee_id: Id do funcionário vinculado à sessão (ver
+                services/permissions.py). Usado pelas ferramentas que
+                escopam dado por pessoa (Cofre de Notas, Rotinas, Encurtador,
+                Catálogo, Dashboard) -- None é um valor válido (sessão sem
+                funcionário vinculado/guest), essas ferramentas tratam isso.
         
         Returns:
             Dict com saída do agente
@@ -353,11 +402,30 @@ class AgentFactory:
                     self.check_calendar_tool,
                     self.check_email_tool,
                     self.send_email_tool,
-                    self.buscar_drive_tool
+                    self.buscar_drive_tool,
+                    self.arquivos_recentes_drive_tool,
+                    self.consultar_documentos_drive_tool,
+                    self.criar_tarefa_tool,
+                    self.consultar_tarefas_tool,
+                    self.concluir_tarefa_tool,
+                    self.dashboard_pessoal_tool,
                 ]:
                     tool.set_credentials(user_credentials)
                 
                 logger.debug("✅ Credenciais configuradas nas ferramentas")
+
+            # 1b. Configurar employee_id nas ferramentas que escopam por pessoa
+            # (sempre, mesmo que None -- cada tool trata a ausência de login)
+            for tool in [
+                self.salvar_nota_tool,
+                self.consultar_notas_tool,
+                self.criar_rotina_tool,
+                self.listar_rotinas_tool,
+                self.encurtar_url_tool,
+                self.catalogo_de_skills_tool,
+                self.dashboard_pessoal_tool,
+            ]:
+                tool.set_employee_id(employee_id)
             
             # 2. Reconstruir histórico
             lc_messages = self._reconstruct_history(session_messages)
@@ -395,6 +463,36 @@ class AgentFactory:
                             })
                         except Exception as e:
                             logger.warning(f"Erro ao processar imagem: {e}")
+
+                    # Resumo de PDF: extrai o texto (determinístico, via pypdf)
+                    # e injeta como contexto -- o próprio orquestrador (seja
+                    # qual for o modelo ativo) responde a pedidos como "resuma
+                    # esse PDF" com base nesse texto, sem precisar de uma tool
+                    # dedicada. PDF escaneado sem camada de texto não extrai
+                    # nada por aqui (precisaria de OCR, fora do escopo atual).
+                    elif file.get('mime', '') == 'application/pdf':
+                        try:
+                            import io
+                            from pypdf import PdfReader
+                            reader = PdfReader(io.BytesIO(file['data']))
+                            texto = "\n".join(page.extract_text() or "" for page in reader.pages)
+                            texto = texto.strip()
+                            if texto:
+                                current_content.append({
+                                    "type": "text",
+                                    "text": f"\n[CONTEÚDO EXTRAÍDO DE '{file.get('name', 'arquivo.pdf')}' ({len(reader.pages)} página(s))]:\n{texto[:15000]}"
+                                })
+                            else:
+                                current_content.append({
+                                    "type": "text",
+                                    "text": f"\n[ARQUIVO '{file.get('name', 'arquivo.pdf')}' parece ser um PDF escaneado/sem texto extraível — não foi possível ler o conteúdo]"
+                                })
+                        except Exception as e:
+                            logger.warning(f"Erro ao processar PDF: {e}")
+                            current_content.append({
+                                "type": "text",
+                                "text": f"\n[Não foi possível extrair o conteúdo do PDF '{file.get('name', 'arquivo.pdf')}': {e}]"
+                            })
             
             # 4. Adicionar contexto do usuário (seguro)
             if user_infos and 'email' in user_infos and 'user' in user_infos:

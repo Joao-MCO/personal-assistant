@@ -10,8 +10,9 @@ os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import admin, auth, chat
+from api import admin, auth, chat, shorturl
 from db.base import init_db
+from services.scheduler import iniciar_scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,12 +40,14 @@ app.add_middleware(
 app.include_router(chat.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(shorturl.router)
 
 
 @app.on_event("startup")
 async def on_startup():
-    """Cria as tabelas que não existirem e roda as seeds iniciais (idempotente)."""
+    """Cria as tabelas que não existirem, roda as seeds iniciais (idempotente) e sobe o Agendador de Rotinas."""
     init_db()
+    iniciar_scheduler()
 
 
 @app.get("/health", tags=["health"])

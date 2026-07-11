@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -108,6 +109,10 @@ class Employee(Base):
     # Não é um Enum de banco de propósito: adicionar um cargo novo não deve
     # exigir uma migração de schema, só atualizar o mapeamento em código.
     role = Column(String, nullable=False, default="member")
+    # Nullable -- não vem do emails.json, precisa ser preenchida à mão via
+    # PATCH /admin/employees/{id}/birthday. Só o dia e o mês importam pro
+    # AniversariantesDoMes; o ano fica registrado mas não é usado pra nada.
+    data_nascimento = Column(Date, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
 
@@ -202,3 +207,52 @@ class LLMCall(Base):
     tokens_out = Column(Integer, nullable=True)
     estimated_cost_usd = Column(Float, nullable=True)
     created_at = Column(DateTime, default=_utcnow, index=True)
+
+
+class Note(Base):
+    """Uma nota do Cofre de Notas. Sempre escopada a um funcionário -- ninguém vê nota de outra pessoa."""
+
+    __tablename__ = "notes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_utcnow, index=True)
+
+
+class ShortUrl(Base):
+    """URL encurtada (Encurtador de URL, self-hosted -- ver app/api/shorturl.py)."""
+
+    __tablename__ = "short_urls"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    slug = Column(String, nullable=False, unique=True, index=True)
+    original_url = Column(Text, nullable=False)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    clicks = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class ScheduledTask(Base):
+    """
+    Uma rotina agendada (Agendador de Rotinas). `action_type` é validado
+    contra um conjunto fixo de ações conhecidas (ver services/scheduler.py,
+    ACTION_HANDLERS) -- nunca código arbitrário, por segurança.
+
+    `hora` + `dias_semana` descrevem o agendamento em vez de aceitar cron
+    puro: mais fácil da LLM extrair de um pedido em linguagem natural
+    ("todo dia às 8h") do que gerar uma expressão cron corretamente.
+    """
+
+    __tablename__ = "scheduled_tasks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    action_type = Column(String, nullable=False)
+    hora = Column(String, nullable=False)  # "HH:MM"
+    dias_semana = Column(String, nullable=True)  # "mon,tue,wed" ou None = todo dia
+    params = Column(Text, nullable=True)  # JSON, específico de cada action_type
+    active = Column(Boolean, nullable=False, default=True)
+    last_run_at = Column(DateTime, nullable=True)
+    last_result = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)

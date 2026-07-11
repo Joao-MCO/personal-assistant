@@ -73,4 +73,7 @@ def get_service(credentials=None, service="calendar"):
     if service == "drive":
         return _build_service(credentials, "drive", "v3")
 
+    if service == "tasks":
+        return _build_service(credentials, "tasks", "v1")
+
     return None

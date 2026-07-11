@@ -226,6 +226,36 @@ class SessionStore:
         finally:
             db.close()
 
+    def get_latest_google_credentials_for_employee(self, employee_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Usado pelo Agendador de Rotinas (services/scheduler.py): uma rotina
+        agendada roda em background, fora do contexto de qualquer sessão de
+        chat ativa, então precisa buscar a credencial Google mais recente
+        entre TODAS as sessões já vinculadas a esse funcionário -- diferente
+        de get_google_credentials(), que exige um session_id específico.
+        """
+        db = SessionLocal()
+        try:
+            row = (
+                db.query(GoogleCredential)
+                .join(SessionModel, GoogleCredential.session_id == SessionModel.id)
+                .filter(SessionModel.employee_id == employee_id)
+                .order_by(SessionModel.last_active.desc())
+                .first()
+            )
+            if row is None:
+                return None
+            return {
+                "token": row.token,
+                "refresh_token": row.refresh_token,
+                "token_uri": row.token_uri,
+                "client_id": row.client_id,
+                "client_secret": row.client_secret,
+                "scopes": json.loads(row.scopes) if row.scopes else [],
+            }
+        finally:
+            db.close()
+
 
 # Instância única compartilhada pela aplicação inteira.
 session_store = SessionStore()

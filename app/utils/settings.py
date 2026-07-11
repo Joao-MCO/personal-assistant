@@ -102,6 +102,19 @@ class SettingsConfig(BaseSettings):
     GITHUB_ORG: Optional[str] = None
     
     # ===========================
+    # SERVIÇOS EXTERNOS (novas skills sem IA)
+    # ===========================
+    
+    # Clima (OpenWeatherMap) — única das consultas externas novas que exige
+    # chave própria; CEP/CPF-CNPJ/Cotação usam APIs públicas sem autenticação.
+    WEATHER_API_KEY: Optional[str] = None
+    
+    # URL pública onde a API está servida — usada para montar o link final
+    # do Encurtador de URL (ex.: "https://cidinha.sharkdev.com.br").
+    # Sem isso configurado, o encurtador devolve só o slug, sem o domínio.
+    PUBLIC_BASE_URL: Optional[str] = None
+    
+    # ===========================
     # APP CONFIGURATION
     # ===========================
     
@@ -288,6 +301,16 @@ class AppSettingsWrapper:
     def github_org(self) -> Optional[str]:
         """Organização padrão no GitHub para busca de commits"""
         return Settings.GITHUB_ORG
+    
+    @property
+    def weather_api_key(self) -> Optional[str]:
+        """Chave da API de clima (OpenWeatherMap)"""
+        return Settings.WEATHER_API_KEY
+    
+    @property
+    def public_base_url(self) -> Optional[str]:
+        """URL pública da API, usada para montar links do Encurtador de URL"""
+        return Settings.PUBLIC_BASE_URL
     
     @property
     def session_ttl_minutes(self) -> int:

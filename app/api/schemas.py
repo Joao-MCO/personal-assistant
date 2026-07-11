@@ -43,10 +43,15 @@ class EmployeeOut(BaseModel):
     email: str
     ativo: bool
     role: str
+    data_nascimento: Optional[str] = Field(default=None, description="Formato AAAA-MM-DD. Só dia/mês são usados pelo AniversariantesDoMes.")
 
 
 class EmployeeRoleUpdate(BaseModel):
     role: Literal["admin", "member", "guest"]
+
+
+class EmployeeBirthdayUpdate(BaseModel):
+    data_nascimento: str = Field(..., description="Formato AAAA-MM-DD.")
 
 
 class ToolAccessUpdate(BaseModel):

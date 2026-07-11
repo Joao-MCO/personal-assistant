@@ -14,6 +14,7 @@ from models.tools import (
 import time
 from typing import Any, Type
 from models.tools import BuscarNoDriveInput
+from models.tools import ArquivosRecentesDriveInput, ConsultarDocumentosDriveInput
 
 logger = logging.getLogger(__name__)
 
@@ -223,3 +224,131 @@ class BuscarNoDrive(BaseTool):
             return f"Erro ao buscar no Drive: {e}"
         finally:
             logger.info(f"BuscarNoDrive — tempo de execução: {time.time() - start:.2f}s")
+
+
+class ArquivosRecentesDrive(BaseTool):
+    name: str = "ArquivosRecentesDrive"
+    description: str = """
+    Use quando o usuário perguntar o que mudou/foi modificado recentemente
+    no Drive — diferente do BuscarNoDrive, que exige um termo de busca, esta
+    lista os arquivos mais recentes sem precisar de nenhum critério.
+    """
+    args_schema: Type[BaseModel] = ArquivosRecentesDriveInput
+    return_direct: bool = False
+    _user_credentials: Any = PrivateAttr(default=None)
+
+    def set_credentials(self, creds):
+        self._user_credentials = creds
+
+    def _run(self, max_resultados: int = 10) -> str:
+        start = time.time()
+        if not self._user_credentials:
+            return MSG_LOGIN
+
+        from services.google_services import get_service
+        service = get_service(self._user_credentials, "drive")
+        if not service:
+            return "Erro técnico ao autenticar no Google Drive."
+
+        try:
+            results = (
+                service.files()
+                .list(
+                    q="trashed = false",
+                    pageSize=max_resultados,
+                    orderBy="modifiedTime desc",
+                    fields="files(id, name, webViewLink, modifiedTime, mimeType)",
+                )
+                .execute()
+            )
+            files = results.get("files", [])
+            if not files:
+                return "Não encontrei nenhum arquivo no Drive."
+
+            linhas = [f"{len(files)} arquivo(s) modificado(s) mais recentemente:"]
+            for f in files:
+                linhas.append(f"- {f['name']} (modificado em {f.get('modifiedTime', '?')}) — {f.get('webViewLink', '')}")
+            return "\n".join(linhas)
+        except Exception as e:
+            logger.error(f"Erro ArquivosRecentesDrive: {e}", exc_info=True)
+            return f"Erro ao consultar o Drive: {e}"
+        finally:
+            logger.info(f"ArquivosRecentesDrive — tempo de execução: {time.time() - start:.2f}s")
+
+
+# Mimetypes do Google Workspace por trás dos nomes "amigáveis" aceitos em ConsultarDocumentosDrive.tipo
+_MIME_POR_TIPO = {
+    "documento": "application/vnd.google-apps.document",
+    "planilha": "application/vnd.google-apps.spreadsheet",
+    "apresentacao": "application/vnd.google-apps.presentation",
+    "pdf": "application/pdf",
+}
+
+
+class ConsultarDocumentosDrive(BaseTool):
+    name: str = "ConsultarDocumentosDrive"
+    description: str = """
+    Use para listar/navegar documentos existentes no Drive por tipo e/ou
+    pasta — diferente do BuscarNoDrive (busca por termo) e do
+    ArquivosRecentesDrive (só recência): esta é uma consulta estruturada,
+    tipo "quais planilhas temos na pasta Financeiro".
+    """
+    args_schema: Type[BaseModel] = ConsultarDocumentosDriveInput
+    return_direct: bool = False
+    _user_credentials: Any = PrivateAttr(default=None)
+
+    def set_credentials(self, creds):
+        self._user_credentials = creds
+
+    def _run(self, tipo: str = None, pasta: str = None, max_resultados: int = 10) -> str:
+        start = time.time()
+        if not self._user_credentials:
+            return MSG_LOGIN
+
+        from services.google_services import get_service
+        service = get_service(self._user_credentials, "drive")
+        if not service:
+            return "Erro técnico ao autenticar no Google Drive."
+
+        try:
+            condicoes = ["trashed = false"]
+
+            if tipo:
+                mimetype = _MIME_POR_TIPO.get(tipo.strip().lower())
+                if mimetype:
+                    condicoes.append(f"mimeType = '{mimetype}'")
+
+            if pasta:
+                pasta_escapada = _escape_query(pasta)
+                pasta_result = (
+                    service.files()
+                    .list(q=f"name = '{pasta_escapada}' and mimeType = 'application/vnd.google-apps.folder'", pageSize=1, fields="files(id)")
+                    .execute()
+                )
+                pastas_encontradas = pasta_result.get("files", [])
+                if not pastas_encontradas:
+                    return f"Não encontrei nenhuma pasta chamada '{pasta}' no Drive."
+                condicoes.append(f"'{pastas_encontradas[0]['id']}' in parents")
+
+            q = " and ".join(condicoes)
+            results = (
+                service.files()
+                .list(q=q, pageSize=max_resultados, orderBy="modifiedTime desc", fields="files(id, name, webViewLink, modifiedTime, mimeType)")
+                .execute()
+            )
+            files = results.get("files", [])
+
+            if not files:
+                filtro = f" do tipo '{tipo}'" if tipo else ""
+                filtro += f" na pasta '{pasta}'" if pasta else ""
+                return f"Não encontrei nenhum documento{filtro}."
+
+            linhas = [f"{len(files)} documento(s) encontrado(s):"]
+            for f in files:
+                linhas.append(f"- {f['name']} (modificado em {f.get('modifiedTime', '?')}) — {f.get('webViewLink', '')}")
+            return "\n".join(linhas)
+        except Exception as e:
+            logger.error(f"Erro ConsultarDocumentosDrive: {e}", exc_info=True)
+            return f"Erro ao consultar o Drive: {e}"
+        finally:
+            logger.info(f"ConsultarDocumentosDrive — tempo de execução: {time.time() - start:.2f}s")

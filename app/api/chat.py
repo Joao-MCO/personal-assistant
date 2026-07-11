@@ -83,6 +83,7 @@ async def chat(
         user_credentials=_build_credentials(creds_dict),
         user_infos=user_infos,
         session_id=sid,
+        employee_id=employee_id,
     )
 
     outputs = result.get("output", [])

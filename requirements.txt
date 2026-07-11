@@ -39,3 +39,12 @@ google-auth-oauthlib
 # Others
 pypdf
 beautifulsoup4
+
+# Utilitários de dev (sem IA)
+pyyaml
+python-ulid
+nanoid
+faker
+
+# Agendador de Rotinas
+apscheduler

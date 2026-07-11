@@ -28,13 +28,14 @@ ADMIN_ONLY_TOOLS: Set[str] = {
     "HealthCheckAgregado",
     "AuditoriaDeDependencias",
     "RevisorDeSeguranca",
+    "RelatorioDeEngajamento",
 }
 
 # Acesso de quem não está vinculado a nenhum Employee (não logou no Google,
 # ou logou com e-mail fora do cadastro). De propósito o conjunto mais restrito:
 # só conhecimento geral, nada de ações (Calendar/Email/Drive já exigem
 # credencial própria e ficam de fora daqui por segurança, não só por acaso).
-GUEST_TOOLS: Set[str] = {"AjudaShark", "RAGDaBaseDeCodigo", "OnboardingGuiado", "TradutorTecnico"}
+GUEST_TOOLS: Set[str] = {"AjudaShark", "RAGDaBaseDeCodigo", "OnboardingGuiado", "TradutorTecnico", "CatalogoDeSkills"}
 
 VALID_ROLES = {"admin", "member", "guest"}
 

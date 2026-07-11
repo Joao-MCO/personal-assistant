@@ -50,6 +50,19 @@ A Cidinha atua como uma agente autónoma que seleciona a ferramenta correta para
 
 ### 👁️ Multimodalidade
 * Suporte para upload e análise de ficheiros (imagens e texto) diretamente na conversa.
+* **Resumo de PDF:** anexe um PDF e peça um resumo — o texto é extraído automaticamente (via `pypdf`) e injetado no contexto da conversa, sem precisar de uma ferramenta dedicada. PDFs escaneados/sem camada de texto não são suportados (precisaria de OCR).
+
+### 🧰 Skills sem IA (regras de negócio, cálculo, ou chamada de API — sem LLM)
+
+**Consultas externas:** `ConsultaCEP`, `ConsultaDocumento` (CPF/CNPJ, com validação local + dados da Receita para CNPJ), `CotacaoMoeda`, `Clima` (exige `WEATHER_API_KEY`).
+
+**Google Workspace, complementos:** `ArquivosRecentesDrive`, `ConsultarDocumentosDrive` (navegação por tipo/pasta), `CriarTarefa`/`ConsultarTarefas`/`ConcluirTarefa` (Google Tasks).
+
+**Produtividade pessoal:** `SalvarNota`/`ConsultarNotas` (Cofre de Notas, por funcionário), `CriarRotina`/`ListarRotinas` (Agendador de Rotinas — relatórios recorrentes por e-mail), `EncurtarURL` (self-hosted, `/s/{slug}`).
+
+**Utilidades de dev:** `ConversorDeFormato` (JSON/YAML/CSV), `Codificador` (Base64/URL/Hex), `GeradorDeIdentificador` (UUID4/ULID/NanoID), `GeradorDeHash` (MD5/SHA1/SHA256/SHA512), `GeradorDeSenha`, `GeradorDeDadosFake` (dados fictícios em pt_BR via Faker, incluindo CPF fake com dígito válido).
+
+**Organização & Meta:** `AniversariantesDoMes`, `RelatorioDeEngajamento` (admin), `DashboardPessoal` (tarefas + aniversariantes + seu uso de IA, tudo de uma vez), `CatalogoDeSkills` ("o que você sabe fazer" — já filtrado pelas suas permissões).
 
 ---
 
@@ -115,6 +128,13 @@ AUTH_COOKIE_SECRET="string_aleatoria"
 GITHUB_TOKEN="ghp_seu_token_aqui"
 GITHUB_ORG="sharkdev"  # opcional se você sempre informar repositórios específicos
 
+# Clima (skill Clima) — única das consultas externas que exige chave própria
+WEATHER_API_KEY="sua_chave_openweathermap"
+
+# Usada para montar o link final do Encurtador de URL. Sem isso, a skill
+# devolve só o slug, sem domínio.
+PUBLIC_BASE_URL="https://cidinha.seudominio.com.br"
+
 # Proteção de /chat (header X-API-Key). Se não houver nenhum cliente
 # cadastrado (ver seção "Banco de Dados" abaixo) e esta variável ficar vazia,
 # a verificação é desabilitada — conveniente em dev, defina em produção.
@@ -143,7 +163,9 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 Com o servidor no ar, a documentação interativa (Swagger) fica disponível em **http://localhost:8000/docs** — é a forma mais rápida de testar os endpoints manualmente, sem precisar de um frontend (cobre o que antes era feito testando direto na interface do Streamlit).
 
-Em produção, prefira rodar por trás de um process manager (ex.: `uvicorn main:app --workers 4` supervisionado por systemd/Docker, ou `gunicorn -k uvicorn.workers.UvicornWorker`).
+Em produção, prefira rodar por trás de um process manager (ex.: `uvicorn main:app` supervisionado por systemd/Docker, ou `gunicorn -k uvicorn.workers.UvicornWorker`).
+
+> ⚠️ **Fique com 1 worker.** O Agendador de Rotinas (`CriarRotina`) roda dentro do próprio processo — com mais de um worker, cada processo teria seu próprio scheduler e a mesma rotina executaria em duplicidade. Se um dia precisar escalar horizontalmente, o caminho é mover para uma fila externa (ex.: Celery Beat) ou garantir que só um worker rode o scheduler.
 
 ---
 
@@ -163,6 +185,9 @@ Na primeira subida, a aplicação cria automaticamente todas as tabelas (via `Ba
 | `tool_calls` | Auditoria + analytics de cada chamada de ferramenta (Calendar, Gmail, Shark Helper...): parâmetros, resultado, sucesso/erro, duração. |
 | `llm_calls` | Uso/custo estimado de cada chamada de LLM, por modelo e por skill — base do `MonitorDeCustosLLM`. |
 | `knowledge_documents` | Controle de quais arquivos já foram indexados no Chroma pelo Shark Helper/RAGs — os vetores continuam só no Chroma, isso é só o registro de auditoria de cima. |
+| `notes` | Cofre de Notas — sempre escopada por `employee_id`. |
+| `short_urls` | Links do Encurtador de URL (self-hosted) e contagem de cliques. |
+| `scheduled_tasks` | Rotinas do Agendador de Rotinas: ação, horário, dias da semana, última execução/resultado. |
 
 ### Permissões por usuário
 
@@ -240,7 +265,7 @@ alembic upgrade head
 
 ## 🔌 Endpoints principais
 
-> ⚠️ **Se você já tinha usuários logados antes desta versão:** o escopo do Google Drive (`drive.readonly`) foi adicionado ao OAuth. Sessões que já fizeram login antes não têm esse escopo — `BuscarNoDrive` vai falhar para elas até a pessoa refazer `/auth/google/login`.
+> ⚠️ **Se você já tinha usuários logados antes desta versão:** os escopos do Google Drive (`drive.readonly`) e do Google Tasks (`tasks`) foram adicionados ao OAuth em momentos diferentes. Sessões que já fizeram login antes de cada um não têm o escopo novo — `BuscarNoDrive`/`ArquivosRecentesDrive`/`ConsultarDocumentosDrive` e `CriarTarefa`/`ConsultarTarefas`/`ConcluirTarefa` vão falhar para elas até a pessoa refazer `/auth/google/login`.
 
 ### Populando as novas bases de conhecimento (RAG)
 
@@ -265,7 +290,11 @@ Reindexação é incremental: um arquivo só é reprocessado se o conteúdo mudo
 | `GET` | `/auth/google/status` | Verifica se uma sessão está autenticada no Google. |
 | `POST` | `/auth/google/logout` | Remove as credenciais Google de uma sessão. |
 | `GET` `POST` `DELETE` | `/admin/employees[/{id}]` | Lista, cria e desativa funcionários. Requer `X-Admin-Token`. |
+| `PATCH` | `/admin/employees/{id}/role` | Muda o cargo (`admin`/`member`/`guest`) de um funcionário. |
+| `PATCH` | `/admin/employees/{id}/birthday` | Cadastra a data de nascimento (formato `AAAA-MM-DD`), usada pelo `AniversariantesDoMes`. Não vem do `emails.json` — precisa ser preenchida aqui, uma vez por pessoa. |
+| `GET` `PUT` `DELETE` | `/admin/employees/{id}/tool-access[/{tool}]` | Vê/ajusta exceções de permissão por ferramenta, além do cargo. |
 | `GET` `POST` `DELETE` | `/admin/api-clients[/{id}]` | Lista, cria e revoga chaves de API. Requer `X-Admin-Token`. |
+| `GET` | `/s/{slug}` | Redireciona para a URL original de um link encurtado (`EncurtarURL`). Acesso livre — é um link que vai parar no navegador de qualquer pessoa. |
 | `GET` | `/health` | Health check. |
 
 `/chat` e `/chat/{session_id}/history` exigem o header `X-API-Key` se houver algum cliente cadastrado em `api_clients` (ver seção "Banco de Dados"). As rotas `/auth/google/*` são de acesso livre (fluxo de redirecionamento do navegador — ver comentário no topo de `app/api/auth.py` para o porquê). As rotas `/admin/*` exigem `X-Admin-Token` e ficam desativadas (503) se `ADMIN_TOKEN` não estiver configurado.
@@ -285,7 +314,7 @@ personal-assistant/
 │   ├── db/              # Modelos SQLAlchemy, engine/sessão, seeds (base.py, models.py, seed.py)
 │   ├── models/          # Definições Pydantic (Inputs das Tools)
 │   ├── services/        # Google, Chroma, SessionStore, GitHub, auditoria/custo de LLM, ingestão de texto
-│   ├── tools/           # As ~19 ferramentas: Shark, Google, código, dev workflow, monitoramento, RAG...
+│   ├── tools/           # As ~43 ferramentas: Shark, Google (Calendar/Gmail/Drive/Tasks), código, dev workflow, monitoramento, RAG, consultas externas, utilidades de dev, notas, rotinas...
 │   ├── utils/           # Configurações e Embeddings (PDF)
 │   └── main.py          # Ponto de entrada (app FastAPI)
 ├── migrations/           # Migrações Alembic (schema do banco)
